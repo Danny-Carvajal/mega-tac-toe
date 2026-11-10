@@ -3,6 +3,7 @@ extends SceneTree
 ##   godot --headless -s tests/run_tests.gd
 
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
+const TurnClock := preload("res://scripts/turn_clock.gd")
 
 var failures := 0
 
@@ -16,6 +17,9 @@ func _init() -> void:
 	test_forced_to_decided_board_gives_free_choice()
 	test_local_draw()
 	test_global_win()
+	test_clock_runs_only_for_active_player()
+	test_clock_increment_and_rollover()
+	test_clock_expiry()
 
 	if failures == 0:
 		print("OK: todos los tests pasaron")
@@ -98,3 +102,29 @@ func test_global_win() -> void:
 	check(g.result == UltimateGame.X, "X gana la partida con 3 tableros en línea")
 	check(g.is_over(), "la partida termina")
 	check(not g.play(5, 5), "no se puede jugar después de terminar")
+
+
+func test_clock_runs_only_for_active_player() -> void:
+	var c := TurnClock.new(30000, 5000)
+	c.start(1, 0)
+	check(c.remaining_ms(1, 10000) == 20000, "el reloj de X corre en su turno")
+	check(c.remaining_ms(2, 10000) == 30000, "el reloj de O no corre en el turno de X")
+
+
+func test_clock_increment_and_rollover() -> void:
+	var c := TurnClock.new(30000, 5000)
+	c.start(1, 0)
+	c.pass_turn(2, 10000)  # X gastó 10s y movió
+	check(c.banks[1] == 25000, "X: 30 - 10 + 5 de incremento")
+	check(c.active == 2, "ahora corre el reloj de O")
+	c.pass_turn(1, 10000 + 2000)  # O movió rápido
+	check(c.banks[2] == 33000, "O guarda el tiempo que le sobró: 30 - 2 + 5")
+
+
+func test_clock_expiry() -> void:
+	var c := TurnClock.new(30000, 5000)
+	c.start(1, 0)
+	check(not c.is_expired(29999), "todavía no se acaba el tiempo")
+	check(c.is_expired(30000), "se acaba el tiempo exacto")
+	c.stop(30000)
+	check(not c.is_expired(99999), "con el reloj detenido no vence")
