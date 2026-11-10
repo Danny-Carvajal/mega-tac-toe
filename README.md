@@ -13,13 +13,16 @@ Ultimate Tic Tac Toe hecho en Godot 4, pensado primero para móvil y web, y a fu
 ## Estructura
 
 - `scripts/ultimate_game.gd`: lógica pura del juego, sin UI ni red.
+- `scripts/main.gd` y `scenes/main.tscn`: pantalla jugable (el tablero se arma por código).
 - `tests/run_tests.gd`: tests de la lógica.
+- `tests/ui_smoke.gd`: smoke test de la pantalla.
 - `project.godot`: configuración (renderer Compatibility para que exporte a web).
 
 ## Tests
 
 ```
 godot --headless -s tests/run_tests.gd
+godot --headless --quit-after 300 -s tests/ui_smoke.gd
 ```
 
 ## Ideas pendientes
