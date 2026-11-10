@@ -1,0 +1,6 @@
+.git
+.godot
+tests
+build
+*.apk
+*.aab

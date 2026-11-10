@@ -106,6 +106,16 @@ func play(big: int, small: int) -> bool:
 	return true
 
 
+## Salta el turno del jugador actual sin poner ninguna marca (por ejemplo cuando
+## se le acaba el tiempo). El tablero forzado se mantiene: el rival juega en el
+## mismo tablero en el que le tocaba al que saltó.
+func skip_turn() -> bool:
+	if is_over():
+		return false
+	current_player = O if current_player == X else X
+	return true
+
+
 func _board_is_full(big: int) -> bool:
 	for small in 9:
 		if cells[big * 9 + small] == NONE:

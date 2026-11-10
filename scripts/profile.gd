@@ -6,9 +6,12 @@ const PATH := "user://profile.cfg"
 const DEFAULT_X := Color("e5484d")
 const DEFAULT_O := Color("3b82f6")
 
+const DEFAULT_SERVER_URL := "ws://127.0.0.1:9080"
+
 var player_name := "Jugador"
 var color_x := DEFAULT_X
 var color_o := DEFAULT_O
+var server_url := DEFAULT_SERVER_URL
 
 
 func load_from_disk() -> void:
@@ -16,6 +19,7 @@ func load_from_disk() -> void:
 	if cfg.load(PATH) != OK:
 		return
 	player_name = str(cfg.get_value("profile", "name", player_name))
+	server_url = str(cfg.get_value("profile", "server_url", server_url))
 	color_x = Color.html(str(cfg.get_value("profile", "color_x", "#" + DEFAULT_X.to_html(false))))
 	color_o = Color.html(str(cfg.get_value("profile", "color_o", "#" + DEFAULT_O.to_html(false))))
 
@@ -23,6 +27,7 @@ func load_from_disk() -> void:
 func save_to_disk() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("profile", "name", player_name)
+	cfg.set_value("profile", "server_url", server_url)
 	cfg.set_value("profile", "color_x", "#" + color_x.to_html(false))
 	cfg.set_value("profile", "color_o", "#" + color_o.to_html(false))
 	cfg.save(PATH)

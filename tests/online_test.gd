@@ -57,14 +57,20 @@ func _run() -> void:
 	check(over.get("winner") == 2, "gana el que no se rindió (el primero tenía el asiento 1)")
 	await _next(first, "over")
 
-	# --- Se acaba el tiempo (el servidor corre con banco de 2s) ---
+	# --- Se acaba el tiempo: salto de turno, y con 3 saltos se pierde ---
+	# (el servidor corre con banco de 2s y repone 1s tras cada salto)
 	a.client.send(qa)
 	b.client.send(qb)
 	await _next(a, "start")
 	await _next(b, "start")
-	var slow := await _next(a, "over", 5.0)
-	check(slow.get("reason") == "timeout", "si nadie mueve, vence el reloj")
-	check(slow.get("winner") == 2, "pierde el jugador al que le tocaba (X)")
+	var skip := await _next(a, "skip", 4.0)
+	check(int(skip.get("player", 0)) == 1, "se le acaba el tiempo a X y le saltan el turno")
+	check(int(skip.get("skips", [0, 0])[0]) == 1, "queda con 1 salto")
+	var skip_b := await _next(b, "skip", 2.0)
+	check(not skip_b.is_empty(), "el rival también se entera del salto")
+	var lost := await _next(a, "over", 12.0)
+	check(lost.get("reason") == "skips", "con 3 saltos por tiempo se pierde")
+	check(lost.get("winner") == 2, "pierde el que acumuló los saltos (X)")
 	await _next(b, "over")
 
 	# --- Sala privada con código ---

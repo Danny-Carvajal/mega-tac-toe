@@ -14,7 +14,9 @@ extends Node
 ##   {t:"waiting"}, {t:"room", code}
 ##   {t:"start", you, names, colors, initial_ms, increment_ms, clocks}
 ##   {t:"move", big, small, player, clocks}
+##   {t:"skip", player, skips:[x,o], clocks}   se le acabó el tiempo: le saltan el turno
 ##   {t:"over", winner (0 = empate), reason, clocks}
+##       reason: line | draw | skips (3 saltos) | resign | disconnect
 ##   {t:"error", msg}
 
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
@@ -23,9 +25,13 @@ const TurnClock := preload("res://scripts/turn_clock.gd")
 const ROOM_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const DEFAULT_COLORS := {"x": "#e5484d", "o": "#3b82f6"}
 
+const MAX_SKIPS := 3
+
 var port := 9080
 var initial_ms := 30000
 var increment_ms := 5000
+## Banco que se le repone a quien se pasó de tiempo y le saltaron el turno.
+var skip_refill_ms := 10000
 
 var _tcp := TCPServer.new()
 var _conns: Array[Conn] = []
@@ -50,11 +56,16 @@ class Session:
 	var game := UltimateGame.new()
 	var clock: TurnClock
 	var seats: Array = [null, null, null]  # índice 1 y 2
+	var skips: Array = [0, 0, 0]
 	var over := false
 
 
 func _ready() -> void:
 	_rng.randomize()
+	# Render (y otros) le pasan el puerto por variable de entorno.
+	var env_port := OS.get_environment("PORT")
+	if not env_port.is_empty():
+		port = int(env_port)
 	_parse_args()
 	var err := _tcp.listen(port)
 	if err != OK:
@@ -72,6 +83,8 @@ func _parse_args() -> void:
 			initial_ms = int(arg.get_slice("=", 1))
 		elif arg.begins_with("--increment="):
 			increment_ms = int(arg.get_slice("=", 1))
+		elif arg.begins_with("--skip_refill="):
+			skip_refill_ms = int(arg.get_slice("=", 1))
 
 
 func _process(_delta: float) -> void:
@@ -93,7 +106,7 @@ func _process(_delta: float) -> void:
 	var now := Time.get_ticks_msec()
 	for session in _sessions.duplicate():
 		if not session.over and session.clock.is_expired(now):
-			_finish(session, 3 - session.game.current_player, "timeout")
+			_handle_timeout(session, now)
 
 
 # --- Mensajes -------------------------------------------------------------
@@ -119,6 +132,8 @@ func _on_message(conn: Conn, text: String) -> void:
 				_finish(conn.session, 3 - conn.seat, "resign")
 		"leave":
 			_leave_waiting(conn)
+		"ping":
+			_send(conn, {"t": "pong"})
 
 
 func _read_profile(conn: Conn, msg: Dictionary) -> void:
@@ -205,6 +220,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 			"colors": colors,
 			"initial_ms": initial_ms,
 			"increment_ms": increment_ms,
+			"max_skips": MAX_SKIPS,
 			"clocks": session.clock.snapshot(now),
 		})
 
@@ -219,7 +235,9 @@ func _on_move(conn: Conn, big: int, small: int) -> void:
 		return
 	var now := Time.get_ticks_msec()
 	if session.clock.is_expired(now):
-		_finish(session, 3 - conn.seat, "timeout")
+		# La jugada llegó tarde: ya le tocaba el salto.
+		_handle_timeout(session, now)
+		_send(conn, {"t": "error", "msg": "Se te acabó el tiempo"})
 		return
 	if not session.game.play(big, small):
 		_send(conn, {"t": "error", "msg": "Jugada ilegal"})
@@ -240,6 +258,24 @@ func _on_move(conn: Conn, big: int, small: int) -> void:
 	if session.game.is_over():
 		var winner := 0 if session.game.result == UltimateGame.DRAW else session.game.result
 		_finish(session, winner, "line" if winner != 0 else "draw")
+
+
+## Se le acabó el tiempo al jugador de turno: le saltan el turno (estilo Polytopia)
+## y con MAX_SKIPS saltos pierde la partida.
+func _handle_timeout(session: Session, now: int) -> void:
+	var loser: int = session.game.current_player
+	session.skips[loser] += 1
+	if session.skips[loser] >= MAX_SKIPS:
+		_finish(session, 3 - loser, "skips")
+		return
+	session.game.skip_turn()
+	session.clock.skip_turn(session.game.current_player, now, skip_refill_ms)
+	_broadcast(session, {
+		"t": "skip",
+		"player": loser,
+		"skips": [session.skips[1], session.skips[2]],
+		"clocks": session.clock.snapshot(now),
+	})
 
 
 func _finish(session: Session, winner: int, reason: String) -> void:

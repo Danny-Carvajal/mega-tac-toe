@@ -5,7 +5,7 @@ set -u
 GODOT="${GODOT:-godot}"
 cd "$(dirname "$0")/.."
 
-"$GODOT" --headless -s server/server_main.gd -- --port=9081 --initial=2000 --increment=0 &
+"$GODOT" --headless -s server/server_main.gd -- --port=9081 --initial=2000 --increment=0 --skip_refill=1000 &
 SERVER_PID=$!
 sleep 2
 

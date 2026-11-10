@@ -43,6 +43,14 @@ func pass_turn(next_player: int, now_ms: int) -> void:
 	start(next_player, now_ms)
 
 
+## Al jugador activo se le acabó el tiempo y le saltan el turno: su banco se
+## repone con `refill_ms` y empieza a correr el reloj del siguiente.
+func skip_turn(next_player: int, now_ms: int, refill_ms: int) -> void:
+	if active != 0:
+		banks[active] = refill_ms
+	start(next_player, now_ms)
+
+
 func stop(now_ms: int) -> void:
 	if active != 0:
 		banks[active] = remaining_ms(active, now_ms)

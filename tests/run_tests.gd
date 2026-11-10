@@ -20,6 +20,8 @@ func _init() -> void:
 	test_clock_runs_only_for_active_player()
 	test_clock_increment_and_rollover()
 	test_clock_expiry()
+	test_skip_turn()
+	test_clock_skip_refill()
 
 	if failures == 0:
 		print("OK: todos los tests pasaron")
@@ -119,6 +121,27 @@ func test_clock_increment_and_rollover() -> void:
 	check(c.active == 2, "ahora corre el reloj de O")
 	c.pass_turn(1, 10000 + 2000)  # O movió rápido
 	check(c.banks[2] == 33000, "O guarda el tiempo que le sobró: 30 - 2 + 5")
+
+
+func test_skip_turn() -> void:
+	var g := UltimateGame.new()
+	g.play(4, 2)  # X manda a O al tablero 2
+	check(g.skip_turn(), "se puede saltar el turno")
+	check(g.current_player == UltimateGame.X, "tras saltar a O, le toca a X")
+	check(g.forced_board == 2, "el tablero forzado se mantiene al saltar")
+	check(g.cells.count(UltimateGame.NONE) == 80, "saltar no pone marcas")
+	g.board_results[0] = UltimateGame.X
+	g.result = UltimateGame.X
+	check(not g.skip_turn(), "no se puede saltar con la partida terminada")
+
+
+func test_clock_skip_refill() -> void:
+	var c := TurnClock.new(30000, 5000)
+	c.start(1, 0)
+	c.skip_turn(2, 30000, 10000)
+	check(c.banks[1] == 10000, "al saltar, el banco se repone")
+	check(c.active == 2, "corre el reloj del rival")
+	check(c.remaining_ms(2, 31000) == 29000, "el rival conserva su banco")
 
 
 func test_clock_expiry() -> void:
