@@ -24,6 +24,18 @@ func _ready() -> void:
 	show_menu()
 
 
+## Botón "atrás" de Android: en el menú cierra la app; en una partida local o
+## terminada vuelve al menú; en una partida online en curso no hace nada
+## (para no rendirse sin querer, hay que usar el botón Rendirse).
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
+		return
+	if game_screen == null:
+		get_tree().quit()
+	elif not game_screen.online or game_screen.finished:
+		show_menu()
+
+
 func show_menu(status: String = "") -> void:
 	game_screen = null
 	menu = Menu.new()

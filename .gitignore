@@ -5,7 +5,6 @@
 
 # Exports y credenciales
 export_credentials.cfg
-export_presets.cfg
 build/
 *.apk
 *.aab

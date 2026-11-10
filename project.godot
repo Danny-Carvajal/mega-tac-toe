@@ -9,6 +9,8 @@ config_version=5
 config/name="Mega Tic Toe"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 run/main_scene="res://scenes/main.tscn"
+config/icon="res://icon.svg"
+config/quit_on_go_back=false
 
 [display]
 
@@ -20,5 +22,6 @@ window/handheld/orientation=1
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
