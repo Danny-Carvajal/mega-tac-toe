@@ -1,0 +1,17 @@
+# Godot 4
+.godot/
+.import/
+*.translation
+
+# Exports y credenciales
+export_credentials.cfg
+export_presets.cfg
+build/
+*.apk
+*.aab
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
