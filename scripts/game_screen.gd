@@ -14,6 +14,8 @@ const COLOR_BG := Color("14151f")
 const COLOR_PANEL := Color("22253a")
 const COLOR_ACTIVE := Color("3d4a7a")
 const COLOR_CELL := Color("2d3048")
+## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
+const COLOR_CELL_OFF := Color("2a2d45")
 const COLOR_DRAW := Color("8a8fa8")
 const COLOR_TEXT := Color("e8eaf6")
 const ARROW_ALPHA := 0.7
@@ -765,7 +767,8 @@ func _style_button(button: Button, color: Color) -> void:
 	button.add_theme_stylebox_override("normal", _flat(color))
 	button.add_theme_stylebox_override("hover", _flat(color.lightened(0.15)))
 	button.add_theme_stylebox_override("pressed", _flat(color.lightened(0.3)))
-	button.add_theme_stylebox_override("disabled", _flat(color.darkened(0.25)))
+	var off := COLOR_CELL_OFF if color == COLOR_CELL else color.darkened(0.25)
+	button.add_theme_stylebox_override("disabled", _flat(off))
 
 
 ## Capa transparente encima del tablero donde se dibujan las flechas de apuntes.
