@@ -15,6 +15,9 @@ var _pending: Dictionary = {}
 
 
 func _ready() -> void:
+	# En el navegador la ventana puede ser ancha: se mantiene la proporción de celular.
+	if OS.has_feature("web"):
+		get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 	profile.load_from_disk()
 	net = NetClient.new()
 	add_child(net)

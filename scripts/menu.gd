@@ -589,7 +589,7 @@ class NavBar extends Control:
 	const LABELS := ["Colores", "Jugar"]
 	const BAR := Color("181a29")
 	const PILL := Color("34406b")
-	const ACCENT := Color("ffd24d")
+	const ACCENT := Color("8f95ad")
 
 	var position_f := 1.0
 	var colors: Array = [Color("e5484d"), Color("3b82f6")]
