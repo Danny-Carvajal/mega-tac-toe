@@ -108,3 +108,19 @@ Una caja cuesta 300 monedas (60 % común, 28 % rara, 9 % épica, 3 % legendaria)
 Monedas: online 100 por ganar, 50 por empatar y 25 por perder; en práctica ganar da de 5 a 25 según el nivel de la IA. Se empieza con 600.
 Lo que tenés se guarda en el dispositivo (`scripts/collection.gd`, `user://collection.json`). Online, el servidor solo le pasa tus cosméticos al rival
 (valida que los ids tengan forma válida; el cliente cae a los de inicio si no los conoce). El VS muestra banner, fuente y figuras de cada jugador.
+
+## Cuentas
+
+Usuario y contraseña, sin correo. Desde Ajustes (engranaje) -> Cuenta. Con sesión iniciada, monedas, cosméticos, stats, historial y perfil se guardan solos en el servidor (se revisa cada 3 s). Al crear la cuenta se sube lo que había en el dispositivo; al entrar a una existente se baja y reemplaza lo local.
+
+El servidor (`server/account_store.gd`) guarda las cuentas en **Supabase** si tiene las variables de entorno `SUPABASE_URL` y `SUPABASE_KEY` (clave `service_role`, solo en Render, nunca en el cliente). Sin ellas usa un archivo local (solo desarrollo; en Render se borraría al reiniciar). Opcional: `AUTH_SECRET` para firmar los tokens de sesión.
+
+Tabla en Supabase (SQL Editor):
+
+```sql
+create table accounts (
+  username text primary key, display text not null, salt text not null, hash text not null,
+  data jsonb not null default '{}'::jsonb, trophies int not null default 0,
+  updated_at timestamptz not null default now());
+alter table accounts enable row level security;
+```

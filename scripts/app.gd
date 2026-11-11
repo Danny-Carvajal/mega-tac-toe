@@ -12,6 +12,8 @@ const History := preload("res://scripts/history.gd")
 const HistoryScreen := preload("res://scripts/history_screen.gd")
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Collection := preload("res://scripts/collection.gd")
+const Account := preload("res://scripts/account.gd")
+const AccountScreen := preload("res://scripts/account_screen.gd")
 const Cosmetics := preload("res://scripts/cosmetics.gd")
 const ShopScreen := preload("res://scripts/shop_screen.gd")
 
@@ -19,6 +21,7 @@ var profile := Profile.new()
 var stats := Stats.new()
 var history := History.new()
 var collection := Collection.new()
+var account: Account
 ## Pantalla auxiliar abierta desde el menú: "" ninguna, "history" lista, "replay" repetición.
 var _view := ""
 var net: Node
@@ -45,6 +48,14 @@ func _ready() -> void:
 	stats.load_from_disk()
 	history.load_from_disk()
 	collection.load_from_disk()
+	account = Account.new()
+	account.profile = profile
+	account.stats = stats
+	account.history = history
+	account.collection = collection
+	add_child(account)
+	account.data_applied.connect(_on_account_data)
+	account.start()
 	net = NetClient.new()
 	add_child(net)
 	net.connected.connect(_on_net_connected)
@@ -67,7 +78,7 @@ func _notification(what: int) -> void:
 		return
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
-	if _view == "shop":
+	if _view == "shop" or _view == "account":
 		show_menu()
 	elif _view == "replay":
 		show_history()
@@ -91,6 +102,8 @@ func show_menu(status: String = "", page := 1) -> void:
 	menu.profile = profile
 	menu.stats = stats
 	menu.collection = collection
+	menu.account = account
+	menu.account_requested.connect(show_account)
 	menu.history_requested.connect(show_history)
 	menu.appearance_changed.connect(func() -> void:
 		Pal.apply(profile.light_mode)
@@ -158,6 +171,26 @@ func show_shop() -> void:
 	screen.profile = profile
 	screen.back_requested.connect(func() -> void: show_menu())
 	_show(screen)
+
+
+## Cuenta: entrar, crear o cerrar sesión.
+func show_account() -> void:
+	if menu != null and is_instance_valid(menu) and menu.cancel_button.visible:
+		_on_cancel_requested()
+	menu = null
+	game_screen = null
+	_view = "account"
+	var screen := AccountScreen.new()
+	screen.account = account
+	screen.back_requested.connect(func() -> void: show_menu())
+	_show(screen)
+
+
+## Se bajaron datos de la cuenta: si se está en el menú, se redibuja con lo nuevo.
+func _on_account_data() -> void:
+	Pal.apply(profile.light_mode)
+	if _view == "" and game_screen == null and menu != null and is_instance_valid(menu) and not menu.cancel_button.visible:
+		show_menu()
 
 
 func show_replay(record: Dictionary) -> void:

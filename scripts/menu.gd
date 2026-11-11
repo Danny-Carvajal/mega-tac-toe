@@ -7,6 +7,7 @@ signal appearance_changed
 signal history_requested
 signal local_requested
 signal shop_requested
+signal account_requested
 signal practice_requested(level: int)
 signal online_requested(kind: String, code: String)
 signal cancel_requested
@@ -33,6 +34,7 @@ const COLOR_LOSS := Color("e5484d")
 
 var profile: Profile
 var collection  # Collection (monedas), para el botón de la tienda
+var account  # Account, para mostrar la sesión en ajustes
 var shop_button: Button
 var color_x: Color
 var color_o: Color
@@ -666,6 +668,12 @@ func _build_server_panel() -> void:
 	heading.add_theme_font_size_override("font_size", 52)
 	heading.add_theme_color_override("font_color", Pal.text)
 	box.add_child(heading)
+	box.add_child(_caption("Cuenta"))
+	var account_button := _make_small_button(("Cuenta: " + account.user) if account != null and account.is_logged_in() else "Entrar o crear cuenta")
+	account_button.pressed.connect(func() -> void:
+		if _taps_allowed():
+			account_requested.emit())
+	box.add_child(account_button)
 	box.add_child(_caption("Servidor"))
 	url_edit = _make_edit(profile.server_url, "wss://...")
 	url_edit.add_theme_font_size_override("font_size", 34)

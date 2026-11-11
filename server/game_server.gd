@@ -29,6 +29,7 @@ extends Node
 
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const TurnClock := preload("res://scripts/turn_clock.gd")
+const AccountStore := preload("res://server/account_store.gd")
 
 const ROOM_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const DEFAULT_COLORS := {"x": "#e5484d", "o": "#3b82f6"}
@@ -59,6 +60,7 @@ var _finished := {}  # token -> {msg, until}: resultado para quien no estaba con
 var _sessions: Array[Session] = []
 var _restoring := {}  # sid -> {seats: {1: {conn, msg}, 2: ...}, since}
 var _rng := RandomNumberGenerator.new()
+var accounts: AccountStore
 var _color_regex := RegEx.create_from_string("^#[0-9a-fA-F]{6}$")
 var _id_regex := RegEx.create_from_string("^[a-z0-9_]{1,24}$")
 
@@ -69,6 +71,7 @@ class Conn:
 	var player_name := "Jugador"
 	var colors := DEFAULT_COLORS.duplicate()
 	var cos := DEFAULT_COS.duplicate()
+	var account := ""  # usuario con sesión iniciada ("" = invitado)
 	var session: Session = null
 	var seat := 0
 	var last_seen_ms := 0
@@ -97,11 +100,13 @@ class Session:
 
 func _ready() -> void:
 	_rng.randomize()
+	accounts = AccountStore.new()
 	# Render (y otros) le pasan el puerto por variable de entorno.
 	var env_port := OS.get_environment("PORT")
 	if not env_port.is_empty():
 		port = int(env_port)
 	_parse_args()
+	add_child(accounts)
 	var err := _tcp.listen(port)
 	if err != OK:
 		push_error("No pude abrir el puerto %d (error %d)" % [port, err])
@@ -122,6 +127,8 @@ func _parse_args() -> void:
 			skip_refill_ms = int(arg.get_slice("=", 1))
 		elif arg.begins_with("--grace="):
 			grace_ms = int(arg.get_slice("=", 1))
+		elif arg.begins_with("--accounts="):
+			accounts.path = arg.get_slice("=", 1)
 		elif arg.begins_with("--intro="):
 			intro_ms = int(arg.get_slice("=", 1))
 
@@ -194,8 +201,56 @@ func _on_message(conn: Conn, text: String) -> void:
 			_resume(conn, str(msg.get("token", "")))
 		"restore":
 			_restore(conn, msg)
+		"register", "login", "auth":
+			await _auth(conn, msg)
+		"save":
+			await _save_account(conn, msg)
+		"logout":
+			conn.account = ""
 		"ping":
 			_send(conn, {"t": "pong"})
+
+
+# --- Cuentas ------------------------------------------------------------
+
+## register / login / auth (con token guardado). Responde {t:"auth", user, token, data, trophies, created}.
+func _auth(conn: Conn, msg: Dictionary) -> void:
+	var kind := str(msg.get("t", ""))
+	var record: Dictionary = {}
+	var created := false
+	if kind == "auth":
+		record = await accounts.check_token(str(msg.get("token", "")))
+		if record.is_empty():
+			_send(conn, {"t": "auth_error", "msg": "Tu sesión venció, entrá de nuevo", "expired": true})
+			return
+	elif kind == "register":
+		var data = msg.get("data", {})
+		var result: Dictionary = await accounts.create_account(str(msg.get("user", "")), str(msg.get("pass", "")), data if typeof(data) == TYPE_DICTIONARY else {})
+		if not result["ok"]:
+			_send(conn, {"t": "auth_error", "msg": result["error"]})
+			return
+		record = result["record"]
+		created = true
+	else:
+		record = await accounts.login(str(msg.get("user", "")), str(msg.get("pass", "")))
+		if record.is_empty():
+			_send(conn, {"t": "auth_error", "msg": "Usuario o contraseña incorrectos"})
+			return
+	conn.account = str(record["username"])
+	_send(conn, {
+		"t": "auth", "user": str(record["display"]), "token": accounts.make_token(record),
+		"data": record.get("data", {}), "trophies": int(record.get("trophies", 0)), "created": created,
+	})
+
+
+func _save_account(conn: Conn, msg: Dictionary) -> void:
+	if conn.account.is_empty():
+		return
+	var data = msg.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	var ok: bool = await accounts.save_data(conn.account, data)
+	_send(conn, {"t": "saved", "ok": ok})
 
 
 ## Deja solo ids con forma válida (letras, números y guion bajo); lo demás vuelve al valor de inicio.
