@@ -286,9 +286,11 @@ func _run() -> void:
 	online.apply_over({"winner": 2, "reason": "skips", "clocks": [1000, 20000]})
 	check(online.status_label.text.begins_with("Ganaste"), "mensaje de victoria")
 	check(online.result_layer.visible and online._result_title == "¡GANASTE!", "al ganar sale el cartel grande")
-	check(online.notes_button.disabled, "con el cartel puesto los apuntes están apagados")
+	check(not online.confirm_layer.visible, "al terminar se cierra la confirmación de rendirse")
+	online._on_small_pressed(0, 0)
+	check(online.game.get_cell(0, 0) == 0, "con la partida terminada tocar el tablero no hace nada")
 	online._dismiss_result_overlay()
-	check(not online.result_layer.visible and not online.notes_button.disabled, "Ver tablero cierra el cartel y activa los apuntes")
+	check(not online.result_layer.visible and not online.notes_button.disabled, "Ver tablero cierra el cartel y los apuntes andan normal")
 	check(online.left_button.text == "Volver al menú", "al terminar se puede volver al menú")
 	online.queue_free()
 

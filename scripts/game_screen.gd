@@ -182,6 +182,8 @@ func apply_skip(data: Dictionary) -> void:
 
 
 func apply_over(data: Dictionary) -> void:
+	if confirm_layer != null:
+		confirm_layer.visible = false  # si se estaba por rendir justo cuando terminó, ya no tiene sentido
 	_set_clocks(data)
 	finished = true
 	var winner := int(data.get("winner", 0))
@@ -651,10 +653,8 @@ func _dismiss_result_overlay() -> void:
 	_update_notes_enabled()
 
 
-## Con el cartel de fin puesto los apuntes no se pueden usar: se activan al tocar "Ver tablero".
 func _update_notes_enabled() -> void:
-	if notes_button != null:
-		notes_button.disabled = result_layer != null and result_layer.visible
+	pass  # Apuntes funciona normal; mientras el cartel está puesto, el cartel tapa todo y no deja tocar nada
 
 
 func _check_result_overlay() -> void:
