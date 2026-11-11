@@ -48,7 +48,9 @@ var replay_play_button: Button
 var _replay_next_ms := 0
 var _replay_mover := 0
 var _replay_skipped := false
-const REPLAY_STEP_MS := 900
+var _replay_note := ""
+var _replay_animate := false
+const REPLAY_STEP_MS := 1100
 var _result_title := ""
 var _result_sub := ""
 var _result_color := Color.WHITE
@@ -816,24 +818,35 @@ func _set_replay_playing(on: bool) -> void:
 
 ## Va a la posición `index` (cantidad de jugadas ya hechas) rearmando la partida desde cero.
 func replay_goto(index: int) -> void:
+	var previous := replay_index
 	replay_index = clampi(index, 0, replay_log.size())
+	_replay_animate = replay_index == previous + 1  # solo se anima el paso de a una jugada
 	game = UltimateGame.new()
 	last_move = Vector2i(-1, -1)
 	last_move_player = 0
 	_replay_mover = 0
 	_replay_skipped = false
+	_replay_note = ""
 	for i in replay_index:
 		var entry = replay_log[i]
 		_replay_mover = game.current_player
 		if entry is Array:
+			var board_before: int = game.board_results[int(entry[0])]
 			if game.play(int(entry[0]), int(entry[1])):
 				last_move = Vector2i(int(entry[0]), int(entry[1]))
 				last_move_player = _replay_mover
 			_replay_skipped = false
+			# Notación: casilla (a1-i9), "+" si ganó una casilla grande, "#" si ganó la partida.
+			_replay_note = History.cell_name(int(entry[0]), int(entry[1]))
+			if game.is_over() and game.result != UltimateGame.DRAW:
+				_replay_note += "#"
+			elif board_before == UltimateGame.NONE and game.board_results[int(entry[0])] != UltimateGame.NONE:
+				_replay_note += "+"
 		else:
 			game.skip_turn()
 			last_move = Vector2i(-1, -1)
 			_replay_skipped = true
+			_replay_note = "salto"
 	_refresh()
 	if replay_index >= replay_log.size() and replay_playing:
 		_set_replay_playing(false)
@@ -853,9 +866,11 @@ func _refresh_replay_status() -> void:
 			text = "%d/%d · %s (%s)" % [replay_index, total, names[_replay_mover], _mark_text(_replay_mover)]
 		_style_banner(_mark_color(_replay_mover), true)
 		status_label.add_theme_color_override("font_color", Color.WHITE)
+	if replay_index > 0:
+		text += "\n" + _replay_note
 	if replay_index >= total:
 		var winner := int(replay_record.get("w", 0))
-		text += "\n" + ("Empate" if winner == 0 else "Ganó %s" % names[winner])
+		text += "  ·  " + ("Empate" if winner == 0 else "Ganó %s" % names[winner])
 	status_label.text = text
 
 
@@ -1012,7 +1027,10 @@ func _refresh() -> void:
 			var button: Button = small_buttons[big][small]
 			button.text = _mark_text(mark)
 			if mark != UltimateGame.NONE and _prev_cells[big * 9 + small] == UltimateGame.NONE:
-				Fx.pop(button)
+				if not replay:
+					Fx.pop(button)
+				elif _replay_animate:
+					Fx.drop_in(button)  # en la repetición las jugadas caen suave una tras otra
 			button.disabled = not (can_play and legal.has(Vector2i(big, small)))
 			button.add_theme_color_override("font_disabled_color", _mark_color(mark))
 

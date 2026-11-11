@@ -82,6 +82,7 @@ func _run() -> void:
 	check(rp.replay_index == 0 and rp.game.get_cell(4, 4) == 0, "la repetición arranca en el inicio")
 	rp._on_replay_button("next")
 	check(rp.replay_index == 1 and rp.game.get_cell(4, 4) == 1, "paso adelante: aparece la primera jugada")
+	check(rp.status_label.text.contains("e5"), "se muestra la notación de la jugada (e5)")
 	rp._on_replay_button("end")
 	check(rp.replay_index == 5 and rp.status_label.text.contains("Ganó Ana"), "al final dice quién ganó")
 	rp._on_replay_button("back")

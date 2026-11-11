@@ -78,3 +78,11 @@ static func format_time(unix_time: int) -> String:
 	var bias := int(Time.get_time_zone_from_system().get("bias", 0))
 	var d := Time.get_datetime_dict_from_unix_time(unix_time + bias * 60)
 	return "%02d/%02d %02d:%02d" % [d["day"], d["month"], d["hour"], d["minute"]]
+
+
+## Notación de una casilla estilo ajedrez: columnas a-i de izquierda a derecha y filas 1-9 de abajo hacia arriba,
+## sobre el tablero completo de 9x9 (a1 = esquina de abajo a la izquierda).
+static func cell_name(big: int, small: int) -> String:
+	var column := (big % 3) * 3 + small % 3
+	var row_from_top := (big / 3) * 3 + small / 3
+	return "%s%d" % ["abcdefghi"[column], 9 - row_from_top]

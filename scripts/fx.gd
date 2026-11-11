@@ -13,6 +13,18 @@ static func pop(control: Control, from_scale := 0.5, duration := 0.28) -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
+## Aparece suave "cayendo" encima de su lugar: arranca más grande y transparente y se asienta sin rebote.
+static func drop_in(control: Control, duration := 0.4) -> void:
+	if not control.is_inside_tree():
+		return
+	control.pivot_offset = control.size / 2.0
+	control.scale = Vector2(1.6, 1.6)
+	control.modulate.a = 0.0
+	var tween := control.create_tween().set_parallel(true)
+	tween.tween_property(control, "scale", Vector2.ONE, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(control, "modulate:a", 1.0, duration * 0.8).set_trans(Tween.TRANS_SINE)
+
+
 ## Aparece con fundido (opcionalmente después de un retraso).
 static func fade_in(control: CanvasItem, duration := 0.22, delay := 0.0) -> void:
 	if not control.is_inside_tree():

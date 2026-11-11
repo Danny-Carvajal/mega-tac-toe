@@ -210,6 +210,7 @@ func test_clock_expiry() -> void:
 
 
 func test_history_encoding() -> void:
+	check(History.cell_name(6, 6) == "a1" and History.cell_name(6, 0) == "a3" and History.cell_name(2, 2) == "i9" and History.cell_name(4, 4) == "e5" and History.cell_name(0, 0) == "a9" and History.cell_name(8, 8) == "i1", "notación a1-i9 (a1 abajo a la izquierda)")
 	var log: Array = [[4, 4], [4, 0], [0, 8], "s", [8, 8]]
 	var text := History.encode(log)
 	check(History.decode(text) == log, "el historial guarda y recupera las jugadas (incluye saltos)")
