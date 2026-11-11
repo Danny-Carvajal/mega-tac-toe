@@ -55,13 +55,17 @@ func _ready() -> void:
 	account.collection = collection
 	add_child(account)
 	account.data_applied.connect(_on_account_data)
+	account.changed.connect(_on_account_changed)
 	account.start()
 	net = NetClient.new()
 	add_child(net)
 	net.connected.connect(_on_net_connected)
 	net.disconnected.connect(_on_net_disconnected)
 	net.message.connect(_on_net_message)
-	show_menu()
+	if account.is_logged_in():
+		show_menu()
+	else:
+		show_login_gate()
 
 
 const RECONNECT_WINDOW_MS := 75000  # un poco más que la gracia del servidor (60 s)
@@ -94,6 +98,7 @@ func _notification(what: int) -> void:
 
 
 func show_menu(status: String = "", page := 1) -> void:
+	_enforce_name()
 	game_screen = null
 	_view = ""
 	_token = ""
@@ -173,6 +178,34 @@ func show_shop() -> void:
 	_show(screen)
 
 
+## El nombre en partida es el de la cuenta, o "Guest" sin sesión.
+func _enforce_name() -> void:
+	var wanted: String = account.user if account.is_logged_in() else "Guest"
+	if profile.player_name != wanted:
+		profile.player_name = wanted
+		profile.save_to_disk()
+
+
+## Pantalla de arranque: entrar, crear cuenta o seguir de invitado.
+func show_login_gate() -> void:
+	menu = null
+	game_screen = null
+	_view = "gate"
+	var screen := AccountScreen.new()
+	screen.account = account
+	screen.gate = true
+	screen.back_requested.connect(func() -> void: show_menu())
+	screen.guest_requested.connect(func() -> void: show_menu())
+	_show(screen)
+
+
+## Si al abrir la app la sesión guardada ya no sirve, se vuelve a la pantalla de entrada.
+func _on_account_changed() -> void:
+	if _view == "" and menu != null and is_instance_valid(menu) and not account.is_logged_in() and not account.busy and not account.status.is_empty() and not menu.cancel_button.visible:
+		account.status = "Tu sesión venció, entrá de nuevo."
+		show_login_gate()
+
+
 ## Cuenta: entrar, crear o cerrar sesión.
 func show_account() -> void:
 	if menu != null and is_instance_valid(menu) and menu.cancel_button.visible:
@@ -183,6 +216,7 @@ func show_account() -> void:
 	var screen := AccountScreen.new()
 	screen.account = account
 	screen.back_requested.connect(func() -> void: show_menu())
+	screen.logged_out.connect(show_login_gate)
 	_show(screen)
 
 

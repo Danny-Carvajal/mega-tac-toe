@@ -63,6 +63,7 @@ var private_button: Button
 var private_box: VBoxContainer
 var practice_button: Button
 var practice_box: VBoxContainer
+var main_scroll: ScrollContainer
 var main_page: Control
 var colors_page: Control
 var colors_section: VBoxContainer
@@ -226,7 +227,7 @@ func _build_ui() -> void:
 	_layout_pages.call_deferred()
 
 
-func _page_root(page: Control) -> VBoxContainer:
+func _page_root(page: Control, scrolls := false) -> VBoxContainer:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
@@ -235,12 +236,21 @@ func _page_root(page: Control) -> VBoxContainer:
 	page.set_meta("margin", margin)
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 28)
-	margin.add_child(root)
+	if scrolls:
+		# Si el contenido no entra (compu, lista de la IA abierta), se puede deslizar hacia abajo.
+		main_scroll = ScrollContainer.new()
+		main_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		main_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		margin.add_child(main_scroll)
+		root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		main_scroll.add_child(root)
+	else:
+		margin.add_child(root)
 	return root
 
 
 func _build_main_page() -> void:
-	var root := _page_root(main_page)
+	var root := _page_root(main_page, true)
 
 	var top_space := Control.new()
 	top_space.custom_minimum_size = Vector2(0, 40)
@@ -284,6 +294,8 @@ func _build_main_page() -> void:
 	root.add_child(_caption("Tu nombre"))
 	name_edit = _make_edit(profile.player_name, "Nombre")
 	name_edit.max_length = 16
+	# El nombre es el de la cuenta, o "Guest" si se entró de invitado.
+	name_edit.editable = false
 	root.add_child(name_edit)
 
 	# Fila principal: Local (chico) - JUGAR (grande) - Privado (chico)
@@ -794,6 +806,16 @@ func _set_practice_open(open: bool) -> void:
 	_style_button(practice_button, Pal.active if open else Pal.cell)
 	if open:
 		Fx.pop(practice_box, 0.92, 0.2)
+		_scroll_to_show.call_deferred(practice_box)
+
+
+## Baja el scroll lo justo para que se vea el bloque que se acaba de abrir.
+func _scroll_to_show(control: Control) -> void:
+	if main_scroll == null or not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if is_instance_valid(control) and control.visible:
+		main_scroll.ensure_control_visible(control)
 
 
 func _set_private_open(open: bool) -> void:
@@ -803,6 +825,7 @@ func _set_private_open(open: bool) -> void:
 	_style_button(private_button, Pal.active if open else Pal.cell)
 	if open:
 		Fx.pop(private_box, 0.9, 0.2)
+		_scroll_to_show.call_deferred(private_box)
 
 
 func _process(delta: float) -> void:

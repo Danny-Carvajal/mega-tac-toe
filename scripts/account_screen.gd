@@ -2,10 +2,14 @@ extends Control
 ## Pantalla de cuenta: crear cuenta, entrar, salir y guardar ahora.
 
 signal back_requested
+signal guest_requested
+signal logged_out
 
 const Pal := preload("res://scripts/pal.gd")
 
 var account  # Account
+## true = es la pantalla de arranque: primero se entra o se elige invitado.
+var gate := false
 
 var _user_edit: LineEdit
 var _pass_edit: LineEdit
@@ -43,7 +47,12 @@ func _build() -> void:
 		child.queue_free()
 		_box.remove_child(child)
 	_buttons.clear()
-	_add_label("Cuenta", 72, Pal.text)
+	if gate and account.is_logged_in():
+		back_requested.emit.call_deferred()
+		return
+	var title := _add_label("Mega Tac Toe" if gate else "Cuenta", 110 if gate else 72, Pal.text)
+	if gate:
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if account.is_logged_in():
 		_add_label("Sesión: %s" % account.user, 48, Pal.accent)
 		_add_label("Tus monedas, cosméticos, stats e historial se guardan solos en tu cuenta y los tenés en cualquier dispositivo.", 34, Pal.muted)
@@ -54,10 +63,12 @@ func _build() -> void:
 			_refresh_status())
 		_box.add_child(save)
 		var out := _button("Cerrar sesión", Pal.cell)
-		out.pressed.connect(func() -> void: account.logout())
+		out.pressed.connect(func() -> void:
+			account.logout()
+			logged_out.emit())
 		_box.add_child(out)
 	else:
-		_add_label("Entrá o creá una cuenta para no perder nada y jugar clasificatorias.", 34, Pal.muted)
+		_add_label("Entrá o creá una cuenta para no perder nada y jugar clasificatorias. Como invitado jugás con el nombre Guest.", 34, Pal.muted)
 		_user_edit = _edit("Usuario", false)
 		_box.add_child(_user_edit)
 		_pass_edit = _edit("Contraseña", true)
@@ -72,11 +83,16 @@ func _build() -> void:
 			if not account.busy:
 				account.register(_user_edit.text.strip_edges(), _pass_edit.text))
 		_box.add_child(create)
+		if gate:
+			var guest := _button("Entrar como invitado", Pal.cell)
+			guest.pressed.connect(func() -> void: guest_requested.emit())
+			_box.add_child(guest)
 		_add_label("Al crear la cuenta se sube lo que ya tenés en este dispositivo. Al entrar a una cuenta que ya existe, se baja lo de la cuenta y reemplaza lo de acá.", 30, Pal.muted)
 	_status = _add_label(account.status, 36, Pal.text)
-	var back := _button("Volver", Pal.cell)
-	back.pressed.connect(func() -> void: back_requested.emit())
-	_box.add_child(back)
+	if not gate:
+		var back := _button("Volver", Pal.cell)
+		back.pressed.connect(func() -> void: back_requested.emit())
+		_box.add_child(back)
 
 
 func _refresh_status() -> void:

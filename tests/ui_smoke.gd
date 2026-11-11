@@ -25,7 +25,11 @@ func _run() -> void:
 	var app: Control = load("res://scenes/main.tscn").instantiate()
 	root.add_child(app)
 	await process_frame
-	check(app.menu != null and app.current == app.menu, "la app arranca en el menú")
+	check(app._view == "gate" and app.current != null and app.current.gate, "sin sesión, la app arranca en la pantalla de entrada")
+	app.current.guest_requested.emit()
+	await process_frame
+	check(app.menu != null and app.current == app.menu, "entrar como invitado lleva al menú")
+	check(app.menu.name_edit.text == "Guest" and not app.menu.name_edit.editable, "el invitado se llama Guest y no se edita")
 	check(app.menu.color_x == Profile.DEFAULT_X, "X es rojo por defecto")
 	check(app.menu.color_o == Profile.DEFAULT_O, "O es azul por defecto")
 
