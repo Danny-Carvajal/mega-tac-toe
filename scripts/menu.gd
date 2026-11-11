@@ -16,6 +16,7 @@ const COLOR_TEXT := Color("e8eaf6")
 const COLOR_MUTED := Color("8a8fa8")
 
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
+const NAV_HEIGHT := 170.0
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 
@@ -36,6 +37,7 @@ var server_button: Button
 var main_page: Control
 var colors_page: Control
 var pager: Control
+var nav: NavBar
 
 var _action_buttons: Array[Button] = []
 var _swatch_x: Button
@@ -108,9 +110,19 @@ func _build_ui() -> void:
 
 	pager = Control.new()
 	pager.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pager.offset_bottom = -NAV_HEIGHT
 	pager.clip_contents = true
 	add_child(pager)
 	pager.resized.connect(_layout_pages)
+
+	# Barra de pestañas de abajo (como Clash Royale): la pestaña activa sube y muestra su nombre.
+	nav = NavBar.new()
+	nav.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	nav.offset_top = -NAV_HEIGHT
+	nav.tab_pressed.connect(func(index: int) -> void:
+		if _taps_allowed():
+			set_colors_open(index == 0))
+	add_child(nav)
 
 	main_page = Control.new()
 	pager.add_child(main_page)
@@ -140,11 +152,6 @@ func _build_main_page() -> void:
 
 	var top := HBoxContainer.new()
 	root.add_child(top)
-	var to_colors := _make_small_button("< Colores")
-	to_colors.pressed.connect(func() -> void:
-		if _taps_allowed():
-			set_colors_open(true))
-	top.add_child(to_colors)
 	var top_spacer := Control.new()
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(top_spacer)
@@ -205,6 +212,14 @@ func _build_main_page() -> void:
 	cancel_button.pressed.connect(func() -> void: cancel_requested.emit())
 	root.add_child(cancel_button)
 
+	# Flecha suave al centro del borde izquierdo: lleva a los colores.
+	var to_colors := Chevron.new(-1)
+	to_colors.pressed.connect(func() -> void:
+		if _taps_allowed():
+			set_colors_open(true))
+	main_page.add_child(to_colors)
+	_anchor_chevron(to_colors, false)
+
 
 func _build_colors_page() -> void:
 	var root := _page_root(colors_page)
@@ -217,11 +232,6 @@ func _build_colors_page() -> void:
 	heading.add_theme_font_size_override("font_size", 64)
 	heading.add_theme_color_override("font_color", COLOR_TEXT)
 	top.add_child(heading)
-	var back := _make_small_button("Volver >")
-	back.pressed.connect(func() -> void:
-		if _taps_allowed():
-			set_colors_open(false))
-	top.add_child(back)
 
 	root.add_child(_caption("Elegí una pieza y cambiale el color"))
 	var swatches := HBoxContainer.new()
@@ -276,6 +286,13 @@ func _build_colors_page() -> void:
 		_select_mark(selected_mark))
 	root.add_child(reset)
 
+	var to_main := Chevron.new(1)
+	to_main.pressed.connect(func() -> void:
+		if _taps_allowed():
+			set_colors_open(false))
+	colors_page.add_child(to_main)
+	_anchor_chevron(to_main, true)
+
 
 func _build_server_panel() -> void:
 	server_panel = PanelContainer.new()
@@ -312,6 +329,19 @@ func _build_server_panel() -> void:
 	row.add_child(done)
 
 
+## Pega la flecha al borde (izquierdo o derecho) de su página, centrada en vertical.
+func _anchor_chevron(chevron: Control, right_edge: bool) -> void:
+	var edge := 1.0 if right_edge else 0.0
+	chevron.anchor_left = edge
+	chevron.anchor_right = edge
+	chevron.anchor_top = 0.5
+	chevron.anchor_bottom = 0.5
+	chevron.offset_left = -64.0 if right_edge else 0.0
+	chevron.offset_right = 0.0 if right_edge else 64.0
+	chevron.offset_top = -120.0
+	chevron.offset_bottom = 120.0
+
+
 func _toggle_server_panel() -> void:
 	if not _taps_allowed():
 		return
@@ -340,6 +370,8 @@ func _set_offset(offset: float) -> void:
 	_page_offset = clampf(offset, 0.0, pager.size.x)
 	main_page.position.x = _page_offset
 	colors_page.position.x = _page_offset - pager.size.x
+	if nav != null:
+		nav.set_progress(1.0 - _page_offset / maxf(pager.size.x, 1.0))
 
 
 func _input(event: InputEvent) -> void:
@@ -418,6 +450,8 @@ func _on_picker_changed(color: Color) -> void:
 func _refresh_swatches() -> void:
 	_style_swatch(_swatch_x, color_x, selected_mark == "X")
 	_style_swatch(_swatch_o, color_o, selected_mark == "O")
+	nav.colors = [color_x, color_o]
+	nav.queue_redraw()
 
 
 func _make_swatch(mark: String) -> Button:
@@ -525,3 +559,88 @@ func _style_button(button: Button, color: Color) -> void:
 			"disabled":
 				style.bg_color = color.darkened(0.3)
 		button.add_theme_stylebox_override(state, style)
+
+
+## Flecha chiquita y suave, sin texto, para pasar de página.
+class Chevron extends Button:
+	var dir := -1  # -1 apunta a la izquierda, 1 a la derecha
+
+	func _init(p_dir: int) -> void:
+		dir = p_dir
+		flat = true
+		focus_mode = Control.FOCUS_NONE
+		custom_minimum_size = Vector2(64, 240)
+
+	func _draw() -> void:
+		var c := size / 2.0
+		var alpha := 0.55 if get_draw_mode() == DRAW_PRESSED else 0.28
+		draw_polyline(PackedVector2Array([
+			Vector2(c.x - dir * 14.0, c.y - 46.0),
+			Vector2(c.x + dir * 14.0, c.y),
+			Vector2(c.x - dir * 14.0, c.y + 46.0)]),
+			Color(1, 1, 1, alpha), 9.0, true)
+
+
+## Barra de pestañas de abajo. `position_f` es el índice (fraccional) de la página visible,
+## así la pestaña activa se desliza junto con el dedo.
+class NavBar extends Control:
+	signal tab_pressed(index: int)
+
+	const LABELS := ["Colores", "Jugar"]
+	const BAR := Color("181a29")
+	const PILL := Color("34406b")
+	const ACCENT := Color("ffd24d")
+
+	var position_f := 1.0
+	var colors: Array = [Color("e5484d"), Color("3b82f6")]
+	var _press_index := -1
+	var _pill := StyleBoxFlat.new()
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(0, 170)
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		_pill.set_corner_radius_all(26)
+
+	func set_progress(value: float) -> void:
+		position_f = value
+		queue_redraw()
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			var index := clampi(int(event.position.x / (size.x / LABELS.size())), 0, LABELS.size() - 1)
+			if event.pressed:
+				_press_index = index
+			else:
+				if _press_index == index:
+					tab_pressed.emit(index)
+				_press_index = -1
+
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), BAR)
+		draw_line(Vector2.ZERO, Vector2(size.x, 0), Color("2d3048"), 3.0)
+		var tab_w := size.x / LABELS.size()
+		var font := ThemeDB.fallback_font
+		for i in LABELS.size():
+			var w := clampf(1.0 - absf(position_f - i), 0.0, 1.0)
+			var rect := Rect2(i * tab_w + 14.0, 8.0 - 4.0 * w, tab_w - 28.0, size.y - 16.0 + 4.0 * w)
+			_pill.bg_color = BAR.lerp(PILL, w)
+			draw_style_box(_pill, rect)
+			draw_rect(Rect2(rect.position.x + 36.0, rect.position.y, rect.size.x - 72.0, 8.0), Color(ACCENT, w))
+			var center := Vector2(rect.position.x + rect.size.x / 2.0, size.y * 0.42 - 16.0 * w)
+			var scale := 1.0 + 0.3 * w
+			var alpha := 0.55 + 0.45 * w
+			if i == 0:
+				draw_circle(center + Vector2(-17, 0) * scale, 27.0 * scale, Color(colors[0], alpha))
+				draw_circle(center + Vector2(17, 0) * scale, 27.0 * scale, Color(colors[1], alpha))
+			else:
+				var half := 30.0 * scale
+				var third := half * 2.0 / 3.0
+				var line := Color(0.91, 0.92, 0.96, alpha)
+				for k in [1, 2]:
+					var offset: float = -half + k * third
+					draw_line(center + Vector2(offset, -half), center + Vector2(offset, half), line, 7.0 * scale, true)
+					draw_line(center + Vector2(-half, offset), center + Vector2(half, offset), line, 7.0 * scale, true)
+			if w > 0.01:
+				var text_size := font.get_string_size(LABELS[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 34)
+				draw_string(font, Vector2(center.x - text_size.x / 2.0, size.y - 26.0), LABELS[i],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1, 1, 1, w))
