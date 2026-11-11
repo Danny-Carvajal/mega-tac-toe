@@ -18,8 +18,37 @@ func _run() -> void:
 	root.add_child(app)
 	await process_frame
 	check(app.menu != null and app.current == app.menu, "la app arranca en el menú")
-	check(app.menu.color_x_button.color == Profile.DEFAULT_X, "X es rojo por defecto")
-	check(app.menu.color_o_button.color == Profile.DEFAULT_O, "O es azul por defecto")
+	check(app.menu.color_x == Profile.DEFAULT_X, "X es rojo por defecto")
+	check(app.menu.color_o == Profile.DEFAULT_O, "O es azul por defecto")
+
+	# Servidor: cascada cerrada y Render por defecto
+	check(not app.menu.server_panel.visible, "la cascada del servidor arranca cerrada")
+	check(app.menu.url_edit.text == Profile.DEFAULT_SERVER_URL, "el servidor por defecto es Render")
+	app.menu._toggle_server_panel()
+	check(app.menu.server_panel.visible, "el botón abre la cascada")
+	check(app.menu.handle_back(), "atrás cierra la cascada primero")
+	check(not app.menu.server_panel.visible, "la cascada quedó cerrada")
+
+	# Página de colores a la izquierda (flecha)
+	var width: float = app.menu.pager.size.x
+	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x == -width, "colores empieza fuera, a la izquierda")
+	app.menu.set_colors_open(true, false)
+	check(app.menu.colors_page.position.x == 0.0 and app.menu.main_page.position.x == width, "la flecha abre los colores")
+	app.menu._select_mark("O")
+	app.menu._set_selected_color(Color("22c55e"))
+	check(app.menu.color_o == Color("22c55e") and app.menu.color_x == Profile.DEFAULT_X, "el atajo cambia solo el color elegido")
+	check(app.menu.handle_back() and not app.menu.colors_open, "atrás vuelve a la página principal")
+	await create_timer(0.5).timeout
+	check(app.menu.main_page.position.x == 0.0, "la animación termina en la página principal")
+
+	# Swipe hacia la derecha abre colores; hacia la izquierda los cierra
+	await _swipe(Vector2(200, 900), Vector2(width * 0.8, 900))
+	await create_timer(0.5).timeout
+	check(app.menu.colors_open, "swipe a la derecha abre los colores")
+	await _swipe(Vector2(width * 0.8, 1700), Vector2(100, 1700))
+	await create_timer(0.5).timeout
+	check(not app.menu.colors_open, "swipe a la izquierda vuelve")
+	app.menu.color_o = Profile.DEFAULT_O
 
 	app.menu.local_requested.emit()
 	await process_frame
@@ -100,6 +129,25 @@ func _run() -> void:
 	else:
 		print("FALLARON %d checks" % failures)
 	quit(1 if failures > 0 else 0)
+
+
+func _swipe(from: Vector2, to: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = from
+	root.push_input(press)
+	for i in 6:
+		var move := InputEventMouseMotion.new()
+		move.position = from.lerp(to, (i + 1) / 6.0)
+		root.push_input(move)
+		await process_frame
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = to
+	root.push_input(release)
+	await process_frame
 
 
 func check(condition: bool, name: String) -> void:

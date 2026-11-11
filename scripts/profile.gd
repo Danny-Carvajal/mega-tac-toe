@@ -6,7 +6,8 @@ const PATH := "user://profile.cfg"
 const DEFAULT_X := Color("e5484d")
 const DEFAULT_O := Color("3b82f6")
 
-const DEFAULT_SERVER_URL := "ws://127.0.0.1:9080"
+const DEFAULT_SERVER_URL := "wss://mega-tac-toe.onrender.com"
+const OLD_LOCAL_URL := "ws://127.0.0.1:9080"
 
 var player_name := "Jugador"
 var color_x := DEFAULT_X
@@ -20,6 +21,9 @@ func load_from_disk() -> void:
 		return
 	player_name = str(cfg.get_value("profile", "name", player_name))
 	server_url = str(cfg.get_value("profile", "server_url", server_url))
+	# Perfiles viejos guardaron la URL local como default: se pasan a Render.
+	if server_url == OLD_LOCAL_URL:
+		server_url = DEFAULT_SERVER_URL
 	color_x = Color.html(str(cfg.get_value("profile", "color_x", "#" + DEFAULT_X.to_html(false))))
 	color_o = Color.html(str(cfg.get_value("profile", "color_o", "#" + DEFAULT_O.to_html(false))))
 

@@ -31,7 +31,8 @@ func _notification(what: int) -> void:
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
 	if game_screen == null:
-		get_tree().quit()
+		if menu == null or not menu.handle_back():
+			get_tree().quit()
 	elif not game_screen.online or game_screen.finished:
 		show_menu()
 
