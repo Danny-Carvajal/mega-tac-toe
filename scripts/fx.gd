@@ -33,11 +33,10 @@ static func stagger_in(controls: Array, step := 0.05, duration := 0.25) -> void:
 			index += 1
 
 
-## El botón se achica un poquito al apretarlo y rebota al soltarlo.
-static func press_feedback(button: Button) -> void:
-	button.resized.connect(func() -> void: button.pivot_offset = button.size / 2.0)
-	button.button_down.connect(func() -> void: _scale_to(button, Vector2(0.95, 0.95), 0.07, false))
-	button.button_up.connect(func() -> void: _scale_to(button, Vector2.ONE, 0.2, true))
+## Los botones NO cambian de tamaño al apretarlos (el zoom al tocar descuadraba la pantalla si se
+## clickeaba rápido varias veces). Se deja la función para no tocar los llamados, pero no hace nada.
+static func press_feedback(_button: Button) -> void:
+	pass
 
 
 static func _scale_to(control: Control, target: Vector2, duration: float, bounce: bool) -> void:

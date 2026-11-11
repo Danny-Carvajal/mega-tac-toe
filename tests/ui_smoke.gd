@@ -101,6 +101,18 @@ func _run() -> void:
 	check(hs.get_child_count() > 0, "la lista de historial se arma")
 	hs.free()
 
+	# Apretar botones varias veces no cambia su tamaño (sin zoom)
+	var zoom_screen := GameScreen.new()
+	zoom_screen.setup_local(Profile.new())
+	root.add_child(zoom_screen)
+	await process_frame
+	for _i in 6:
+		zoom_screen.notes_button.button_down.emit()
+		zoom_screen.notes_button.button_up.emit()
+	await create_timer(0.4).timeout
+	check(zoom_screen.notes_button.scale == Vector2.ONE, "el botón de apuntes no hace zoom al apretarlo")
+	zoom_screen.free()
+
 	# Modo claro desde el pop up de ajustes
 	app.menu.theme_button.pressed.emit()
 	await create_timer(0.5).timeout
