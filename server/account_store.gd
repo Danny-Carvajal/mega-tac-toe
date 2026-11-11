@@ -168,10 +168,12 @@ func _request(method: int, query: String, body: Variant = null) -> Dictionary:
 	add_child(http)
 	var headers := PackedStringArray([
 		"apikey: " + supabase_key,
-		"Authorization: Bearer " + supabase_key,
 		"Content-Type: application/json",
 		"Prefer: return=minimal" if method != HTTPClient.METHOD_GET else "Accept: application/json",
 	])
+	# Las claves nuevas (sb_secret_...) no son JWT: van solo en apikey. Las viejas (service_role) también llevan Authorization.
+	if not supabase_key.begins_with("sb_"):
+		headers.append("Authorization: Bearer " + supabase_key)
 	var text := "" if body == null else JSON.stringify(body)
 	var err := http.request(supabase_url + "/rest/v1/accounts" + query, headers, method, text)
 	if err != OK:
