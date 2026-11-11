@@ -21,6 +21,7 @@ const WIDE_SCALES := [0.62, 0.9, 0.62]
 const WIDE_CONTENT_W := 1000.0
 const EDGE_W := 190.0
 const EDGE_TOP := 130.0
+const EDGE_DWELL := 0.2
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 const COLOR_WIN := Color("3ecf8e")
@@ -58,6 +59,9 @@ var _action_buttons: Array[Button] = []
 var _chevrons: Array[Control] = []
 var _dividers: Array[ColorRect] = []
 var _edges: Array[EdgeZone] = []
+var _edge_idx := -1
+var _edge_t := 0.0
+var _edge_blocked := 0
 var _reset_armed := false
 var _swatch_x: Button
 var _swatch_o: Button
@@ -177,7 +181,6 @@ func _build_ui() -> void:
 		var edge := EdgeZone.new()
 		edge.dir = dir
 		edge.visible = false
-		edge.activated.connect(func() -> void: set_page(page + edge.dir))
 		add_child(edge)
 		_edges.append(edge)
 	_layout_pages.call_deferred()
@@ -624,10 +627,58 @@ func _set_private_open(open: bool) -> void:
 		Fx.pop(private_box, 0.9, 0.2)
 
 
+func _process(delta: float) -> void:
+	if wide and pager != null:
+		edge_tick(delta, get_viewport().get_mouse_position())
+
+
+## Lado (-1 izquierda, 1 derecha, 0 ninguno) del borde donde está el mouse; la esquina de arriba no cuenta.
+func _edge_side(point: Vector2) -> int:
+	if point.y < EDGE_TOP or point.y > size.y:
+		return 0
+	if point.x < EDGE_W:
+		return -1
+	if point.x > size.x - EDGE_W:
+		return 1
+	return 0
+
+
+## Mouse quieto un ratito en el costado = cambia de pantalla. Después de cambiar hay que salir del costado
+## para que no encadene a la página siguiente.
+func edge_tick(delta: float, mouse: Vector2) -> void:
+	var side := _edge_side(mouse)
+	if server_panel.visible or _dragging:
+		side = 0
+	if side == 0 or side != _edge_blocked:
+		_edge_blocked = 0 if side == 0 else _edge_blocked
+	var hit := -1
+	for i in _edges.size():
+		var edge := _edges[i]
+		edge.progress = 0.0 if i != _edge_idx else edge.progress
+		if edge.visible and edge.dir == side and side != _edge_blocked:
+			hit = i
+	if hit == -1:
+		_edge_idx = -1
+		_edge_t = 0.0
+		for edge in _edges:
+			edge.progress = 0.0
+		return
+	if hit != _edge_idx:
+		_edge_idx = hit
+		_edge_t = 0.0
+	_edge_t += delta
+	_edges[hit].progress = _edge_t / EDGE_DWELL
+	if _edge_t >= EDGE_DWELL:
+		_edge_blocked = side
+		_edge_idx = -1
+		_edge_t = 0.0
+		_edges[hit].progress = 0.0
+		set_page(page + side)
+
+
 func _layout_edges() -> void:
 	for edge in _edges:
 		edge.size = Vector2(EDGE_W, pager.size.y)
-		edge.top_dead = EDGE_TOP
 		edge.position = Vector2(0.0 if edge.dir < 0 else size.x - EDGE_W, 0.0)
 
 
@@ -655,6 +706,15 @@ func _set_page_f(f: float) -> void:
 func _input(event: InputEvent) -> void:
 	if pager == null:
 		return
+	if wide and not server_panel.visible and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var side := _edge_side(event.position)
+		if side != 0:
+			for edge in _edges:
+				if edge.visible and edge.dir == side:
+					_edge_blocked = side
+					set_page(page + side)
+					get_viewport().set_input_as_handled()
+					return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_pressing = _swipe_allowed(event.position)
@@ -1057,48 +1117,19 @@ class RecentDots extends Control:
 
 ## Zona del borde para compu: al pasar el mouse un momento cambia de pantalla.
 class EdgeZone extends Control:
-	signal activated
-
 	var dir := -1
 	var label := ""
-	var hover_t := 0.0
-	var hovering := false
-	var top_dead := 0.0
-	const DWELL := 0.2
+	var progress := 0.0:
+		set(value):
+			if not is_equal_approx(value, progress):
+				progress = value
+				queue_redraw()
 
 	func _init() -> void:
-		mouse_filter = Control.MOUSE_FILTER_STOP
-		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		mouse_entered.connect(func() -> void: hovering = true)
-		mouse_exited.connect(func() -> void: hovering = false)
-
-	func _process(delta: float) -> void:
-		if not visible:
-			hover_t = 0.0
-			return
-		var before := hover_t
-		if hovering:
-			hover_t += delta
-			if hover_t >= DWELL:
-				hover_t = 0.0
-				hovering = false
-				activated.emit()
-		else:
-			hover_t = maxf(0.0, hover_t - delta * 3.0)
-		if before != hover_t:
-			queue_redraw()
-
-	## La esquina de arriba queda libre para el engranaje.
-	func _has_point(point: Vector2) -> bool:
-		return point.y >= top_dead
-
-	func _gui_input(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			hover_t = 0.0
-			activated.emit()
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		var f := clampf(hover_t / DWELL, 0.0, 1.0)
+		var f := clampf(progress, 0.0, 1.0)
 		var edge_alpha := (0.35 + 0.35 * f) * (0.4 if Pal.light else 1.0)
 		var base := Pal.text if Pal.light else Color.BLACK
 		var outer := Color(base, edge_alpha * (0.5 if Pal.light else 1.0))
