@@ -94,6 +94,7 @@ func set_busy(busy: bool) -> void:
 	for button in _action_buttons:
 		button.disabled = busy
 	cancel_button.visible = busy
+	cancel_button.disabled = false  # es de las "acciones", pero justo este tiene que seguir andando
 	if busy:
 		server_panel.visible = false
 		set_colors_open(false)

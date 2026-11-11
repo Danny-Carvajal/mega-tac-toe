@@ -52,6 +52,12 @@ func _run() -> void:
 	check(not app.menu.colors_open, "swipe a la izquierda vuelve")
 	app.menu.color_o = Profile.DEFAULT_O
 
+	# Buscando rival: el botón Cancelar tiene que estar habilitado y volver al estado normal
+	app.menu.set_busy(true)
+	check(app.menu.cancel_button.visible and not app.menu.cancel_button.disabled, "buscando rival: Cancelar está habilitado")
+	app.menu.cancel_button.pressed.emit()
+	check(not app.menu.cancel_button.visible and not app.menu._action_buttons[0].disabled, "Cancelar vuelve el menú a la normalidad")
+
 	# Modo claro desde el pop up de ajustes
 	app.menu.theme_button.pressed.emit()
 	await create_timer(0.5).timeout
