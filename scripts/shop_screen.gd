@@ -147,7 +147,7 @@ func _ready() -> void:
 	notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notice_label.add_theme_font_size_override("font_size", 30)
 	notice_label.add_theme_color_override("font_color", Pal.muted)
-	notice_label.text = "Probabilidades: 60% común, 28% rara, 9% épica y 3% legendaria. Si te sale una repetida, te devuelven monedas."
+	notice_label.text = "Probabilidades: 60% común, 28% rara, 9% épica y 3% legendaria. Si te sale una repetida te devuelven monedas: común 100, rara 150, épica 200, legendaria 300."
 	notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left_box.add_child(notice_label)
 

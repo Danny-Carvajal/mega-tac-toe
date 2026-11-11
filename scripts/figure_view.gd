@@ -18,6 +18,14 @@ func _line(from: Vector2, to: Vector2, width: float) -> void:
 	draw_circle(from, width / 2.0, color)
 	draw_circle(to, width / 2.0, color)
 
+## Elipse como línea (sin usar draw_set_transform, que no se ve bien con varias seguidas).
+func _ellipse(center: Vector2, rx: float, ry: float, rot: float, width: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in 49:
+		var a := i * TAU / 48.0
+		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry).rotated(rot))
+	draw_polyline(pts, col, width, true)
+
 func _star(center: Vector2, points: int, outer: float, inner: float, rotation := -PI / 2.0) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in points * 2:
@@ -70,6 +78,50 @@ func _draw() -> void:
 				var a := i * TAU / 6.0
 				draw_circle(c + Vector2(cos(a), sin(a)) * r * 0.58, r * 0.4, color)
 			draw_circle(c, r * 0.3, color.lightened(0.55))
+		"paw":
+			draw_circle(c + Vector2(0, r * 0.35), r * 0.5, color)
+			for toe in [Vector2(-0.78, -0.05), Vector2(-0.3, -0.6), Vector2(0.3, -0.6), Vector2(0.78, -0.05)]:
+				draw_circle(c + toe * r, r * 0.22, color)
+		"drop":
+			draw_circle(c + Vector2(0, r * 0.3), r * 0.7, color)
+			draw_colored_polygon(_scaled([Vector2(0, -1.15), Vector2(0.65, 0.12), Vector2(-0.65, 0.12)], c, r), color)
+		"leaf":
+			var axis := Vector2(1, -1).normalized()
+			var normal := Vector2(1, 1).normalized()
+			var top := PackedVector2Array()
+			var bottom := PackedVector2Array()
+			for i in 21:
+				var u := -1.0 + 2.0 * i / 20.0
+				var w := 0.55 * (1.0 - u * u)
+				top.append(c + axis * u * r * 1.2 + normal * w * r)
+				bottom.append(c + axis * u * r * 1.2 - normal * w * r)
+			bottom.reverse()
+			top.append_array(bottom)
+			draw_colored_polygon(top, color)
+			draw_line(c - axis * r * 1.2, c + axis * r * 1.0, Color(0, 0, 0, 0.35), t * 0.25, true)
+		"sword":
+			var axis := Vector2(1, -1).normalized()
+			var normal := Vector2(1, 1).normalized()
+			_line(c - axis * r * 0.2, c + axis * r * 1.15, t * 0.65)
+			_line(c - axis * r * 0.2 - normal * r * 0.55, c - axis * r * 0.2 + normal * r * 0.55, t * 0.5)
+			_line(c - axis * r * 0.2, c - axis * r * 0.85, t * 0.45)
+			draw_circle(c - axis * r * 0.95, t * 0.4, color)
+		"rocket":
+			draw_colored_polygon(_scaled([Vector2(0, -1.2), Vector2(0.45, -0.4), Vector2(0.45, 0.7), Vector2(-0.45, 0.7), Vector2(-0.45, -0.4)], c, r), color)
+			draw_colored_polygon(_scaled([Vector2(-0.45, 0.1), Vector2(-0.95, 0.95), Vector2(-0.45, 0.7)], c, r), color)
+			draw_colored_polygon(_scaled([Vector2(0.45, 0.1), Vector2(0.45, 0.7), Vector2(0.95, 0.95)], c, r), color)
+			draw_colored_polygon(_scaled([Vector2(-0.25, 0.75), Vector2(0.25, 0.75), Vector2(0, 1.25)], c, r), color.lightened(0.5))
+			draw_circle(c + Vector2(0, -0.15) * r, r * 0.2, Color(0, 0, 0, 0.4))
+		"skull":
+			draw_circle(c + Vector2(0, -0.15) * r, r * 0.85, color)
+			draw_rect(Rect2(c + Vector2(-0.45, 0.4) * r, Vector2(0.9, 0.6) * r), color)
+			for eye in [-0.33, 0.33]:
+				draw_circle(c + Vector2(eye, -0.15) * r, r * 0.22, Color(0, 0, 0, 0.7))
+		"gem":
+			draw_colored_polygon(_scaled([Vector2(-0.55, -0.85), Vector2(0.55, -0.85), Vector2(1, -0.2), Vector2(0, 1.05), Vector2(-1, -0.2)], c, r * 1.05), color)
+			var facet := Color(1, 1, 1, 0.45)
+			for seg in [[Vector2(-1, -0.2), Vector2(1, -0.2)], [Vector2(-0.55, -0.85), Vector2(-0.35, -0.2)], [Vector2(0.55, -0.85), Vector2(0.35, -0.2)], [Vector2(-0.35, -0.2), Vector2(0, 1.05)], [Vector2(0.35, -0.2), Vector2(0, 1.05)]]:
+				draw_line(c + seg[0] * r * 1.05, c + seg[1] * r * 1.05, facet, t * 0.2, true)
 		"o_classic":
 			draw_arc(c, r * 0.85, 0.0, TAU, 48, color, t, true)
 		"dot":
@@ -92,7 +144,7 @@ func _draw() -> void:
 			for i in 25:  # arco de afuera: de 56.8° a 303.2° pasando por 180°
 				var a := deg_to_rad(56.8 + (303.2 - 56.8) * i / 24.0)
 				pts.append(c + Vector2(cos(a), sin(a)) * r * 1.1)
-			for i in 25:  # arco de adentro, de vuelta
+			for i in range(1, 24):  # arco de adentro, de vuelta (sin repetir los puntos de las puntas)
 				var a := deg_to_rad(280.0 - (280.0 - 80.0) * i / 24.0)
 				pts.append(c + (Vector2(0.4, 0) + Vector2(cos(a), sin(a)) * 0.85) * r * 1.1)
 			draw_colored_polygon(pts, color)
@@ -104,12 +156,51 @@ func _draw() -> void:
 		"spiral":
 			var pts := PackedVector2Array()
 			for k in 61:
-				var a := k * 0.34
-				pts.append(c + Vector2(cos(a), sin(a)) * (r * 0.12 + r * 0.9 * k / 60.0))
-			draw_polyline(pts, color, t * 0.7, true)
+				var a := k * 0.21
+				pts.append(c + Vector2(cos(a), sin(a)) * (r * 0.1 + r * 0.95 * k / 60.0))
+			draw_polyline(pts, color, t * 0.55, true)
 		"ring_double":
 			draw_arc(c, r * 1.0, 0.0, TAU, 48, color, t * 0.5, true)
 			draw_arc(c, r * 0.5, 0.0, TAU, 40, color, t * 0.5, true)
+		"dashed":
+			for i in 12:
+				var start := i * TAU / 12.0
+				draw_arc(c, r * 0.9, start, start + TAU / 12.0 * 0.6, 8, color, t * 0.85, true)
+		"pixel":
+			var s := r * 0.62
+			for gx in range(-1, 2):
+				for gy in range(-1, 2):
+					if gx != 0 or gy != 0:
+						draw_rect(Rect2(c + Vector2(gx, gy) * s - Vector2(s, s) * 0.45, Vector2(s, s) * 0.9), color)
+		"eye":
+			var lens := PackedVector2Array()
+			for i in 21:
+				var x := -1.2 + 2.4 * i / 20.0
+				lens.append(c + Vector2(x, -0.6 * (1.0 - pow(x / 1.2, 2.0))) * r)
+			for i in 21:
+				var x := 1.2 - 2.4 * i / 20.0
+				lens.append(c + Vector2(x, 0.6 * (1.0 - pow(x / 1.2, 2.0))) * r)
+			lens.append(lens[0])
+			draw_polyline(lens, color, t * 0.5, true)
+			draw_circle(c, r * 0.38, color)
+			draw_circle(c, r * 0.15, Color(0, 0, 0, 0.6))
+		"shield":
+			var outline := _scaled([Vector2(-0.85, -0.8), Vector2(0.85, -0.8), Vector2(0.85, 0.1), Vector2(0, 1.1), Vector2(-0.85, 0.1), Vector2(-0.85, -0.8)], c, r)
+			draw_polyline(outline, color, t * 0.8, true)
+		"planet":
+			draw_circle(c, r * 0.6, color)
+			_ellipse(c, r * 1.25, r * 0.48, -0.35, t * 0.5, color.lightened(0.35))
+		"snowflake":
+			for i in 6:
+				var dir := Vector2.from_angle(i * TAU / 6.0)
+				_line(c, c + dir * r * 1.1, t * 0.45)
+				var branch := c + dir * r * 0.62
+				_line(branch, branch + dir.rotated(0.8) * r * 0.35, t * 0.4)
+				_line(branch, branch + dir.rotated(-0.8) * r * 0.35, t * 0.4)
+		"atom":
+			draw_circle(c, r * 0.2, color)
+			for k in 3:
+				_ellipse(c, r * 1.15, r * 0.45, k * PI / 3.0, t * 0.4, color)
 		"draw":  # empate de un tablero chico: un "="
 			_line(c + Vector2(-r, -r * 0.4), c + Vector2(r, -r * 0.4), t)
 			_line(c + Vector2(-r, r * 0.4), c + Vector2(r, r * 0.4), t)

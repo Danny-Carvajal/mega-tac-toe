@@ -363,13 +363,13 @@ func _run() -> void:
 	root.add_child(shop)
 	await process_frame
 	check(shop.coins_label.text == "650 monedas" and not shop.box_button.disabled, "la tienda muestra las monedas y deja abrir caja")
-	check(shop.grid.get_child_count() == 10, "la pestaña de figuras de X lista las 10 figuras")
+	check(shop.grid.get_child_count() == 17, "la pestaña de figuras de X lista las 17 figuras")
 	shop._select_tab("banner")
 	await process_frame
-	check(shop.grid.get_child_count() == 13, "la pestaña de banners lista los 13 banners")
+	check(shop.grid.get_child_count() == 21, "la pestaña de banners lista los 21 banners")
 	shop._select_tab("font")
 	await process_frame
-	check(shop.grid.get_child_count() == 9, "la pestaña de fuentes lista las 9 fuentes")
+	check(shop.grid.get_child_count() == 15, "la pestaña de fuentes lista las 15 fuentes")
 	shop._on_box_pressed()
 	await process_frame
 	check(shop.overlay.visible and shop_collection.boxes_opened == 1 and shop_collection.coins >= 350, "abrir la caja muestra la animación y cobra")
@@ -404,7 +404,7 @@ func _run() -> void:
 		drawing_holder.add_child(banner)
 	await process_frame
 	await process_frame
-	check(drawing_holder.get_child_count() == 33, "se dibujan las 20 figuras y los 13 banners")
+	check(drawing_holder.get_child_count() == 55, "se dibujan las 34 figuras y los 21 banners")
 	drawing_holder.queue_free()
 	# Figura elegida en el tablero (local): la X usa mi figura de X
 	var cos_local := GameScreen.new()

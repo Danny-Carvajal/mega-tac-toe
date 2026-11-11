@@ -11,7 +11,7 @@ const RARITY_COLORS := [Color("9aa3b8"), Color("4f8ff7"), Color("a855f7"), Color
 ## Probabilidad de cada rareza al abrir una caja (suman 100).
 const RARITY_WEIGHTS := [60, 28, 9, 3]
 ## Si toca algo que ya tenés, te devuelven monedas según la rareza.
-const REFUND := [40, 80, 150, 250]
+const REFUND := [100, 150, 200, 300]
 
 const BOX_PRICE := 300
 const START_COINS := 600
@@ -35,6 +35,13 @@ const FIGURES_X := [
 	{"id": "shuriken", "name": "Shuriken", "rarity": 2},
 	{"id": "crown", "name": "Corona", "rarity": 3},
 	{"id": "flower", "name": "Flor", "rarity": 3},
+	{"id": "paw", "name": "Huella", "rarity": 0},
+	{"id": "drop", "name": "Gota", "rarity": 0},
+	{"id": "leaf", "name": "Hoja", "rarity": 1},
+	{"id": "sword", "name": "Espada", "rarity": 1},
+	{"id": "rocket", "name": "Cohete", "rarity": 2},
+	{"id": "skull", "name": "Calavera", "rarity": 2},
+	{"id": "gem", "name": "Gema", "rarity": 3},
 ]
 const FIGURES_O := [
 	{"id": "o_classic", "name": "O clásica", "rarity": 0},
@@ -47,6 +54,13 @@ const FIGURES_O := [
 	{"id": "ring_double", "name": "Doble aro", "rarity": 2},
 	{"id": "sun", "name": "Sol", "rarity": 3},
 	{"id": "diamond_ring", "name": "Rombo hueco", "rarity": 3},
+	{"id": "dashed", "name": "Aro punteado", "rarity": 0},
+	{"id": "pixel", "name": "Píxeles", "rarity": 0},
+	{"id": "eye", "name": "Ojo", "rarity": 1},
+	{"id": "shield", "name": "Escudo", "rarity": 1},
+	{"id": "planet", "name": "Planeta", "rarity": 2},
+	{"id": "snowflake", "name": "Copo", "rarity": 2},
+	{"id": "atom", "name": "Átomo", "rarity": 3},
 ]
 
 ## Banners: dos colores en diagonal, un patrón encima y, si `anim`, se mueve despacio. `neutral` usa los colores del tema.
@@ -64,6 +78,14 @@ const BANNERS := {
 	"banner_aurora": {"name": "Aurora", "rarity": 3, "c1": "22c55e", "c2": "8b5cf6", "pattern": "stars", "anim": true},
 	"banner_galaxy": {"name": "Galaxia", "rarity": 3, "c1": "4338ca", "c2": "0b0b1e", "pattern": "stars", "anim": true},
 	"banner_gold": {"name": "Oro", "rarity": 3, "c1": "fcd34d", "c2": "b45309", "pattern": "rings", "anim": true},
+	"banner_sand": {"name": "Arena", "rarity": 0, "c1": "d6b88a", "c2": "8a6a3f"},
+	"banner_ink": {"name": "Tinta", "rarity": 0, "c1": "1e3a8a", "c2": "0b1330"},
+	"banner_candy": {"name": "Dulce", "rarity": 1, "c1": "f472b6", "c2": "a78bfa", "pattern": "dots"},
+	"banner_lime": {"name": "Limón", "rarity": 1, "c1": "a3e635", "c2": "15803d", "pattern": "stripes"},
+	"banner_ice": {"name": "Hielo", "rarity": 1, "c1": "93c5fd", "c2": "1d4ed8", "pattern": "grid"},
+	"banner_toxic": {"name": "Tóxico", "rarity": 2, "c1": "84cc16", "c2": "365314", "pattern": "waves", "anim": true},
+	"banner_royal": {"name": "Real", "rarity": 2, "c1": "7c3aed", "c2": "1e1b4b", "pattern": "rings", "anim": true},
+	"banner_inferno": {"name": "Infierno", "rarity": 3, "c1": "dc2626", "c2": "450a0a", "pattern": "waves", "anim": true},
 }
 
 ## Fuentes del nombre: variaciones de la fuente base (negrita, cursiva, espaciado) y colores.
@@ -77,6 +99,12 @@ const FONTS := {
 	"font_gold": {"name": "Dorada", "rarity": 2, "color": "ffd24a", "shadow": "5a3a00", "embolden": 0.6},
 	"font_fire": {"name": "Fuego", "rarity": 3, "color": "ffb347", "outline": "b3260e", "outline_size": 9, "embolden": 0.8, "skew": 0.18},
 	"font_ice": {"name": "Hielo", "rarity": 3, "color": "e6fbff", "outline": "2a8fd1", "outline_size": 9, "embolden": 0.6, "spacing": 4},
+	"font_slant": {"name": "Itálica fuerte", "rarity": 0, "embolden": 0.7, "skew": 0.25},
+	"font_mint": {"name": "Menta", "rarity": 1, "color": "7dffb8", "outline": "0b5b3a", "outline_size": 6, "embolden": 0.4},
+	"font_gum": {"name": "Chicle", "rarity": 1, "color": "ff9ad5", "shadow": "7a1450", "embolden": 0.5},
+	"font_electric": {"name": "Eléctrica", "rarity": 2, "color": "fff36b", "outline": "7a5af8", "outline_size": 8, "embolden": 0.5, "skew": 0.2},
+	"font_toxic": {"name": "Tóxica", "rarity": 2, "color": "b6ff3b", "outline": "1b4d00", "outline_size": 9, "embolden": 0.7},
+	"font_royal": {"name": "Real", "rarity": 3, "color": "e9d5ff", "outline": "6d28d9", "outline_size": 10, "embolden": 0.7, "spacing": 5},
 }
 
 

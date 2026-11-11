@@ -328,7 +328,7 @@ func test_ai_levels_get_stronger() -> void:
 # --- Cosméticos y cajas ------------------------------------------------------
 
 func test_cosmetics_catalog() -> void:
-	check(Cosmetics.items_of_kind("fx").size() == 10 and Cosmetics.items_of_kind("fo").size() == 10, "hay 10 figuras por lado")
+	check(Cosmetics.items_of_kind("fx").size() == 17 and Cosmetics.items_of_kind("fo").size() == 17, "hay 17 figuras por lado")
 	var ids := {}
 	var unique := true
 	for entry in Cosmetics.all_items():
