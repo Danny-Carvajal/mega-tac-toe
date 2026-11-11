@@ -17,6 +17,8 @@ const COLOR_MUTED := Color("8a8fa8")
 
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
 const NAV_HEIGHT := 170.0
+## En pantalla ancha las dos páginas van lado a lado, achicadas para que entren.
+const WIDE_SCALE := 0.66
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 
@@ -25,6 +27,7 @@ var color_x: Color
 var color_o: Color
 var selected_mark := "X"
 var colors_open := false
+var wide := false
 
 var name_edit: LineEdit
 var code_edit: LineEdit
@@ -40,6 +43,8 @@ var pager: Control
 var nav: NavBar
 
 var _action_buttons: Array[Button] = []
+var _chevrons: Array[Control] = []
+var _divider: ColorRect
 var _swatch_x: Button
 var _swatch_o: Button
 var _page_offset := 0.0
@@ -86,6 +91,8 @@ func handle_back() -> bool:
 
 func set_colors_open(open: bool, animate := true) -> void:
 	colors_open = open
+	if wide:
+		return
 	if open:
 		server_panel.visible = false
 		get_viewport().gui_release_focus()
@@ -123,6 +130,12 @@ func _build_ui() -> void:
 		if _taps_allowed():
 			set_colors_open(index == 0))
 	add_child(nav)
+
+	_divider = ColorRect.new()
+	_divider.color = COLOR_CELL
+	_divider.visible = false
+	_divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_divider)
 
 	main_page = Control.new()
 	pager.add_child(main_page)
@@ -218,6 +231,7 @@ func _build_main_page() -> void:
 		if _taps_allowed():
 			set_colors_open(true))
 	main_page.add_child(to_colors)
+	_chevrons.append(to_colors)
 	_anchor_chevron(to_colors, false)
 
 
@@ -291,6 +305,7 @@ func _build_colors_page() -> void:
 		if _taps_allowed():
 			set_colors_open(false))
 	colors_page.add_child(to_main)
+	_chevrons.append(to_main)
 	_anchor_chevron(to_main, true)
 
 
@@ -350,14 +365,43 @@ func _toggle_server_panel() -> void:
 		server_panel.reset_size()
 		var button_rect := server_button.get_global_rect()
 		var origin := main_page.get_global_rect().position
+		var page_scale := main_page.scale.x
 		server_panel.position = Vector2(
-			button_rect.end.x - origin.x - server_panel.size.x,
-			button_rect.end.y - origin.y + 16)
+			(button_rect.end.x - origin.x) / page_scale - server_panel.size.x,
+			(button_rect.end.y - origin.y) / page_scale + 16.0)
 
 
 # ---------------------------------------------------------------- páginas y swipe
 
+## Reacomoda el menú: celular (páginas con swipe y barra de abajo) o compu (todo a la vista).
+func apply_layout(is_wide: bool) -> void:
+	wide = is_wide
+	if pager == null:
+		return
+	pager.offset_bottom = 0.0 if wide else -NAV_HEIGHT
+	nav.visible = not wide
+	_divider.visible = wide
+	for chevron in _chevrons:
+		chevron.visible = not wide
+	server_panel.visible = false
+	_layout_pages()
+
+
 func _layout_pages() -> void:
+	if wide:
+		if _tween != null:
+			_tween.kill()
+		var half := Vector2(pager.size.x / 2.0, pager.size.y)
+		for page in [main_page, colors_page]:
+			page.scale = Vector2(WIDE_SCALE, WIDE_SCALE)
+			page.size = half / WIDE_SCALE
+		main_page.position = Vector2.ZERO
+		colors_page.position = Vector2(half.x, 0.0)
+		_divider.position = Vector2(half.x - 1.5, 80.0)
+		_divider.size = Vector2(3.0, pager.size.y - 160.0)
+		return
+	main_page.scale = Vector2.ONE
+	colors_page.scale = Vector2.ONE
 	main_page.size = pager.size
 	colors_page.size = pager.size
 	if _tween == null or not _tween.is_running():
@@ -367,6 +411,8 @@ func _layout_pages() -> void:
 
 
 func _set_offset(offset: float) -> void:
+	if wide:
+		return
 	_page_offset = clampf(offset, 0.0, pager.size.x)
 	main_page.position.x = _page_offset
 	colors_page.position.x = _page_offset - pager.size.x
@@ -402,6 +448,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _swipe_allowed(point: Vector2) -> bool:
+	if wide:
+		return false
 	if server_panel.visible and server_panel.get_global_rect().has_point(point):
 		return false
 	# En la página de colores, arrastrar sobre el selector es para elegir color, no para pasar de página.

@@ -50,6 +50,16 @@ func _run() -> void:
 	check(not app.menu.colors_open, "swipe a la izquierda vuelve")
 	app.menu.color_o = Profile.DEFAULT_O
 
+	# Layout ancho (compu): las dos páginas lado a lado, sin barra de abajo
+	app.menu.apply_layout(true)
+	await process_frame
+	check(not app.menu.nav.visible, "en compu no hay barra de pestañas")
+	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x > 0.0, "en compu menú y colores van lado a lado")
+	check(app.menu.colors_page.position.x + app.menu.colors_page.size.x * app.menu.colors_page.scale.x <= app.menu.pager.size.x + 1.0, "la página de colores cabe en pantalla")
+	app.menu.apply_layout(false)
+	await process_frame
+	check(app.menu.nav.visible and app.menu.colors_page.position.x == -width, "al volver a vertical vuelve la barra y las páginas con swipe")
+
 	app.menu.local_requested.emit()
 	await process_frame
 	check(app.game_screen != null, "jugar local abre la pantalla de juego")
@@ -64,6 +74,10 @@ func _run() -> void:
 	root.add_child(local)
 	await process_frame
 	check(local.small_buttons.size() == 9 and local.small_buttons[0].size() == 9, "9 tableros de 9 casillas")
+	local.apply_layout(true)
+	check(local.status_label.get_parent() == local.side_box and local.buttons_row.vertical, "en compu el estado y los botones van a la derecha")
+	local.apply_layout(false)
+	check(local.status_label.get_parent() == local.root_box and not local.buttons_row.vertical, "en vertical todo vuelve a la columna")
 	local._on_small_pressed(4, 2)
 	check(local.small_buttons[4][2].text == "X", "la casilla jugada muestra X")
 	check(not local.small_buttons[2][0].disabled, "el tablero forzado queda jugable")

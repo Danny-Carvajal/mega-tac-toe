@@ -34,6 +34,15 @@ var _result_text := ""
 var _notice := ""
 var _notice_until_ms := 0
 
+## En pantallas anchas (compu) el tablero va a la izquierda y los datos a la derecha.
+var wide := false
+var root_box: BoxContainer
+var clock_row: BoxContainer
+var buttons_row: BoxContainer
+var ratio_box: AspectRatioContainer
+var side_box: VBoxContainer
+var side_spacer: Control
+
 var status_label: Label
 var clock_labels: Array = [null, null, null]
 var left_button: Button
@@ -184,12 +193,14 @@ func _build_ui() -> void:
 		margin.add_theme_constant_override("margin_" + side, 40)
 	add_child(margin)
 
-	var root := VBoxContainer.new()
+	var root := BoxContainer.new()
+	root.vertical = true
 	root.add_theme_constant_override("separation", 28)
 	margin.add_child(root)
+	root_box = root
 
 	if online:
-		var clock_row := HBoxContainer.new()
+		clock_row = BoxContainer.new()
 		clock_row.add_theme_constant_override("separation", 24)
 		root.add_child(clock_row)
 		for seat in [1, 2]:
@@ -208,8 +219,10 @@ func _build_ui() -> void:
 
 	var ratio := AspectRatioContainer.new()
 	ratio.ratio = 1.0
+	ratio.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ratio.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(ratio)
+	ratio_box = ratio
 
 	var big_grid := GridContainer.new()
 	big_grid.columns = 3
@@ -219,9 +232,10 @@ func _build_ui() -> void:
 	for big in 9:
 		_build_big_cell(big_grid, big)
 
-	var buttons := HBoxContainer.new()
+	var buttons := BoxContainer.new()
 	buttons.add_theme_constant_override("separation", 24)
 	root.add_child(buttons)
+	buttons_row = buttons
 
 	left_button = _make_button("Menú", COLOR_CELL)
 	left_button.pressed.connect(_on_left_pressed)
@@ -231,6 +245,42 @@ func _build_ui() -> void:
 		new_game_button = _make_button("Nueva partida", COLOR_ACTIVE)
 		new_game_button.pressed.connect(_on_new_game_pressed)
 		buttons.add_child(new_game_button)
+
+
+	side_box = VBoxContainer.new()
+	side_box.custom_minimum_size = Vector2(640, 0)
+	side_box.add_theme_constant_override("separation", 28)
+	side_spacer = Control.new()
+	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+
+## Reacomoda la pantalla: vertical (celular) o ancha (compu).
+func apply_layout(is_wide: bool) -> void:
+	wide = is_wide
+	if root_box == null:
+		return
+	for part in [clock_row, status_label, ratio_box, buttons_row, side_box, side_spacer]:
+		if part != null and part.get_parent() != null:
+			part.get_parent().remove_child(part)
+	if wide:
+		root_box.vertical = false
+		root_box.add_child(ratio_box)
+		root_box.add_child(side_box)
+		if clock_row != null:
+			side_box.add_child(clock_row)
+		side_box.add_child(status_label)
+		side_box.add_child(side_spacer)
+		side_box.add_child(buttons_row)
+	else:
+		root_box.vertical = true
+		if clock_row != null:
+			root_box.add_child(clock_row)
+		root_box.add_child(status_label)
+		root_box.add_child(ratio_box)
+		root_box.add_child(buttons_row)
+	if clock_row != null:
+		clock_row.vertical = wide
+	buttons_row.vertical = wide
 
 
 func _make_button(text: String, color: Color) -> Button:

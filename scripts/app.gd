@@ -12,12 +12,13 @@ var current: Control
 var menu: Control
 var game_screen: Control
 var _pending: Dictionary = {}
+## true cuando la ventana es más ancha que alta (compu): layout horizontal.
+var wide := false
 
 
 func _ready() -> void:
-	# En el navegador la ventana puede ser ancha: se mantiene la proporción de celular.
-	if OS.has_feature("web"):
-		get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
+	get_window().size_changed.connect(_update_layout)
+	_update_layout()
 	profile.load_from_disk()
 	net = NetClient.new()
 	add_child(net)
@@ -58,6 +59,21 @@ func _show(screen: Control) -> void:
 	current = screen
 	add_child(screen)
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if screen.has_method("apply_layout"):
+		screen.apply_layout(wide)
+
+
+## Elige el layout según la forma de la ventana: vertical (celular) o ancho (compu).
+func _update_layout() -> void:
+	var window := get_window()
+	var is_wide := window.size.x > window.size.y * 1.1
+	var base := Vector2i(1920, 1080) if is_wide else Vector2i(1080, 1920)
+	if window.content_scale_size != base:
+		window.content_scale_size = base
+	if is_wide != wide:
+		wide = is_wide
+		if current != null and current.has_method("apply_layout"):
+			current.apply_layout(wide)
 
 
 func _on_local_requested() -> void:
