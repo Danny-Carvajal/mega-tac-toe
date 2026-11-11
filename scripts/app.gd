@@ -10,10 +10,15 @@ const Pal := preload("res://scripts/pal.gd")
 const Stats := preload("res://scripts/stats.gd")
 const History := preload("res://scripts/history.gd")
 const HistoryScreen := preload("res://scripts/history_screen.gd")
+const UltimateGame := preload("res://scripts/ultimate_game.gd")
+const Collection := preload("res://scripts/collection.gd")
+const Cosmetics := preload("res://scripts/cosmetics.gd")
+const ShopScreen := preload("res://scripts/shop_screen.gd")
 
 var profile := Profile.new()
 var stats := Stats.new()
 var history := History.new()
+var collection := Collection.new()
 ## Pantalla auxiliar abierta desde el menú: "" ninguna, "history" lista, "replay" repetición.
 var _view := ""
 var net: Node
@@ -39,6 +44,7 @@ func _ready() -> void:
 	Pal.apply(profile.light_mode)
 	stats.load_from_disk()
 	history.load_from_disk()
+	collection.load_from_disk()
 	net = NetClient.new()
 	add_child(net)
 	net.connected.connect(_on_net_connected)
@@ -61,7 +67,9 @@ func _notification(what: int) -> void:
 		return
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
-	if _view == "replay":
+	if _view == "shop":
+		show_menu()
+	elif _view == "replay":
 		show_history()
 	elif _view == "history":
 		show_menu("", 2)
@@ -82,12 +90,14 @@ func show_menu(status: String = "", page := 1) -> void:
 	menu = Menu.new()
 	menu.profile = profile
 	menu.stats = stats
+	menu.collection = collection
 	menu.history_requested.connect(show_history)
 	menu.appearance_changed.connect(func() -> void:
 		Pal.apply(profile.light_mode)
 		show_menu()
 		menu.open_settings.call_deferred())
 	menu.local_requested.connect(_on_local_requested)
+	menu.shop_requested.connect(show_shop)
 	menu.practice_requested.connect(_on_practice_requested)
 	menu.online_requested.connect(_on_online_requested)
 	menu.cancel_requested.connect(_on_cancel_requested)
@@ -136,6 +146,20 @@ func show_history() -> void:
 	_show(screen)
 
 
+## Tienda y colección (monedas, cajas y cosméticos).
+func show_shop() -> void:
+	if menu != null and is_instance_valid(menu) and menu.cancel_button.visible:
+		_on_cancel_requested()
+	menu = null
+	game_screen = null
+	_view = "shop"
+	var screen := ShopScreen.new()
+	screen.collection = collection
+	screen.profile = profile
+	screen.back_requested.connect(func() -> void: show_menu())
+	_show(screen)
+
+
 func show_replay(record: Dictionary) -> void:
 	_view = "replay"
 	game_screen = null
@@ -147,20 +171,32 @@ func show_replay(record: Dictionary) -> void:
 
 func _on_local_requested() -> void:
 	game_screen = GameScreen.new()
-	game_screen.setup_local(profile)
+	game_screen.setup_local(profile, collection.equipped_payload())
 	game_screen.exit_requested.connect(show_menu)
 	_show(game_screen)
 
 
 func _on_practice_requested(level: int) -> void:
 	game_screen = GameScreen.new()
-	game_screen.setup_practice(profile, level)
+	game_screen.setup_practice(profile, level, collection.equipped_payload())
+	game_screen.practice_over.connect(_on_practice_over)
 	game_screen.exit_requested.connect(show_menu)
 	_show(game_screen)
 
 
+## Ganar en práctica da pocas monedas según el nivel de la IA; perder o empatar no da.
+func _on_practice_over(won: bool, level: int) -> void:
+	if not won:
+		return
+	var coins: int = Cosmetics.COINS_PRACTICE_WIN[clampi(level, 1, 5) - 1]
+	collection.add_coins(coins)
+	collection.save_to_disk()
+	if game_screen != null:
+		game_screen.coins_note = "+%d monedas" % coins
+
+
 func _on_online_requested(kind: String, code: String) -> void:
-	var payload := {"name": profile.player_name, "colors": profile.colors_payload()}
+	var payload := {"name": profile.player_name, "colors": profile.colors_payload(), "cos": collection.equipped_payload()}
 	match kind:
 		"queue":
 			payload["t"] = "queue"
@@ -314,6 +350,11 @@ func _record_result(data: Dictionary) -> void:
 	var result := "D" if winner == 0 else ("W" if winner == game_screen.my_seat else "L")
 	stats.record(result)
 	stats.save_to_disk()
+	var coins: int = Cosmetics.COINS_WIN if result == "W" else (Cosmetics.COINS_DRAW if result == "D" else Cosmetics.COINS_LOSS)
+	collection.add_coins(coins)
+	collection.save_to_disk()
+	game_screen.coins_note = "+%d monedas" % coins
 	history.add(History.make_record([game_screen.names[1], game_screen.names[2]], game_screen._start_colors,
-			game_screen.my_seat, winner, str(data.get("reason", "")), game_screen.move_log))
+			game_screen.my_seat, winner, str(data.get("reason", "")), game_screen.move_log,
+			[game_screen._mark_figure(UltimateGame.X), game_screen._mark_figure(UltimateGame.O)]))
 	history.save_to_disk()

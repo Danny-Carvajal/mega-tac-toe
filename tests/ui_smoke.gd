@@ -7,6 +7,11 @@ const Pal := preload("res://scripts/pal.gd")
 const GameScreen := preload("res://scripts/game_screen.gd")
 const Profile := preload("res://scripts/profile.gd")
 const IntroScreen := preload("res://scripts/intro_screen.gd")
+const ShopScreen := preload("res://scripts/shop_screen.gd")
+const Collection := preload("res://scripts/collection.gd")
+const Cosmetics := preload("res://scripts/cosmetics.gd")
+const FigureView := preload("res://scripts/figure_view.gd")
+const BannerView := preload("res://scripts/banner_view.gd")
 
 var failures := 0
 
@@ -183,10 +188,10 @@ func _run() -> void:
 	await process_frame
 	check(practice.status_label.text.begins_with("Tu turno"), "práctica: empieza la persona (X)")
 	practice._on_small_pressed(4, 4)
-	check(practice.small_buttons[4][4].text == "X" and practice.game.current_player == 2, "práctica: mi jugada se dibuja y le toca a la IA")
+	check(practice.cell_text(4, 4) == "X" and practice.game.current_player == 2, "práctica: mi jugada se dibuja y le toca a la IA")
 	check(practice.status_label.text.contains("pensando"), "práctica: se avisa que la IA piensa")
 	practice._on_small_pressed(4, 0)
-	check(practice.small_buttons[4][0].text == "", "práctica: no puedo jugar mientras la IA piensa")
+	check(practice.cell_text(4, 0) == "", "práctica: no puedo jugar mientras la IA piensa")
 	await create_timer(1.2).timeout
 	check(practice.game.cells.count(2) == 1 and practice.game.current_player == 1, "práctica: la IA contestó con una jugada")
 	check(practice.status_label.text.begins_with("Tu turno"), "práctica: vuelve mi turno")
@@ -214,12 +219,12 @@ func _run() -> void:
 	local.apply_layout(false)
 	check(local.turn_banner.get_parent() == local.root_box and not local.buttons_row.vertical, "en vertical todo vuelve a la columna")
 	local._on_small_pressed(4, 2)
-	check(local.small_buttons[4][2].text == "X", "la casilla jugada muestra X")
+	check(local.cell_text(4, 2) == "X", "la casilla jugada muestra X")
 	check(not local.small_buttons[2][0].disabled, "el tablero forzado queda jugable")
 	check(local.small_buttons[0][0].disabled, "los demás tableros se bloquean")
 	check(local.status_label.text.begins_with("Turno de O"), "turno de O")
 	local._on_new_game_pressed()
-	check(local.small_buttons[4][2].text == "", "nueva partida limpia el tablero")
+	check(local.cell_text(4, 2) == "", "nueva partida limpia el tablero")
 	local.queue_free()
 
 	# --- Un tablero ganado sigue jugable y su marca es translúcida ---
@@ -232,8 +237,8 @@ func _run() -> void:
 	won.game.play(0, 2)
 	won.game.forced_board = -1
 	won._refresh()
-	check(won.result_labels[0].visible, "el tablero ganado muestra su marca grande")
-	check(won.result_labels[0].get_theme_color("font_color").a < 0.5, "la marca grande es translúcida")
+	check(won.result_figs[0].visible, "el tablero ganado muestra su marca grande")
+	check(won.result_figs[0].color.a < 0.5, "la marca grande es translúcida")
 	check(not won.small_buttons[0][5].disabled, "las casillas libres del tablero ganado se pueden jugar")
 	check(won.small_buttons[0][0].disabled, "las ocupadas no")
 	won.queue_free()
@@ -318,6 +323,78 @@ func _run() -> void:
 	check(rg.finished and rg.status_label.text == "Se cayó la conexión", "si la partida ya no existe, termina")
 	app2.queue_free()
 
+	# --- Tienda y cosméticos ---
+	var shop_collection := Collection.new()
+	shop_collection.path = "user://test_collection.json"
+	shop_collection.coins = 650
+	var shop := ShopScreen.new()
+	shop.collection = shop_collection
+	shop.profile = Profile.new()
+	root.add_child(shop)
+	await process_frame
+	check(shop.coins_label.text == "650 monedas" and not shop.box_button.disabled, "la tienda muestra las monedas y deja abrir caja")
+	check(shop.grid.get_child_count() == 10, "la pestaña de figuras de X lista las 10 figuras")
+	shop._select_tab("banner")
+	await process_frame
+	check(shop.grid.get_child_count() == 13, "la pestaña de banners lista los 13 banners")
+	shop._select_tab("font")
+	await process_frame
+	check(shop.grid.get_child_count() == 9, "la pestaña de fuentes lista las 9 fuentes")
+	shop._on_box_pressed()
+	await process_frame
+	check(shop.overlay.visible and shop_collection.boxes_opened == 1 and shop_collection.coins >= 350, "abrir la caja muestra la animación y cobra")
+	await create_timer(1.2).timeout
+	check(shop.overlay.get_child_count() >= 2, "la caja se abre y muestra lo que salió")
+	shop._close_overlay()
+	check(not shop.overlay.visible, "se cierra el cartel de la caja")
+	shop_collection.coins = 100
+	shop._refresh()
+	check(shop.box_button.disabled, "sin monedas no se puede abrir otra caja")
+	shop_collection.owned["heart"] = true
+	shop._select_tab("fx")
+	shop._on_tile_pressed("heart")
+	check(shop_collection.equipped["fx"] == "heart", "tocar una figura que tenés la equipa")
+	shop._on_tile_pressed("bolt")
+	check(shop_collection.equipped["fx"] == "heart", "tocar una bloqueada no hace nada")
+	shop.queue_free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_collection.json"))
+	# Todas las figuras y banners se dibujan sin errores
+	var drawing_holder := Control.new()
+	root.add_child(drawing_holder)
+	for entry in Cosmetics.items_of_kind("fx") + Cosmetics.items_of_kind("fo"):
+		var figure := FigureView.new()
+		figure.custom_minimum_size = Vector2(120, 120)
+		figure.size = Vector2(120, 120)
+		figure.set_figure(entry["id"], Color.WHITE)
+		drawing_holder.add_child(figure)
+	for entry in Cosmetics.items_of_kind("banner"):
+		var banner := BannerView.new()
+		banner.size = Vector2(600, 200)
+		banner.set_banner(entry["id"])
+		drawing_holder.add_child(banner)
+	await process_frame
+	await process_frame
+	check(drawing_holder.get_child_count() == 33, "se dibujan las 20 figuras y los 13 banners")
+	drawing_holder.queue_free()
+	# Figura elegida en el tablero (local): la X usa mi figura de X
+	var cos_local := GameScreen.new()
+	cos_local.setup_local(Profile.new(), {"fx": "star", "fo": "moon", "b": "banner_classic", "n": "font_classic"})
+	root.add_child(cos_local)
+	await process_frame
+	cos_local._on_small_pressed(4, 4)
+	check(cos_local._mark_figure(1) == "star" and cos_local._mark_figure(2) == "moon", "el tablero dibuja con las figuras elegidas")
+	cos_local._on_small_pressed(4, 0)
+	check(cos_local.cell_text(4, 4) == "X" and cos_local.cell_text(4, 0) == "O", "las marcas con figura se siguen leyendo como X y O")
+	cos_local.queue_free()
+	# Online: cada uno ve la figura del rival según su lado
+	var cos_start := {"t": "start", "you": 1, "names": ["Ana", "Beto"], "colors": ["#e5484d", "#3b82f6"], "clocks": [30000, 30000], "rules": 2,
+			"cosmetics": [{"fx": "heart", "fo": "sun", "b": "banner_gold", "n": "font_fire"}, {"fx": "bolt", "fo": "target", "b": "hack!", "n": "font_ice"}]}
+	var cos_online := GameScreen.new()
+	cos_online.setup_online(cos_start, Profile.new())
+	check(cos_online._mark_figure(1) == "heart" and cos_online._mark_figure(2) == "target", "online: la X usa la figura de X de Ana y la O la figura de O de Beto")
+	check(cos_online.seat_cos[2]["b"] == "banner_classic", "online: un banner raro del rival vuelve al de inicio")
+	cos_online.free()
+
 	# --- Presentación online: VS + moneda ---
 	var intro_start := {"t": "start", "you": 2, "names": ["Ana", "Beto"], "colors": ["#e5484d", "#3b82f6"],
 			"clocks": [30000, 30000], "intro_ms": 900, "rules": 2}
@@ -374,18 +451,18 @@ func _run() -> void:
 	online._on_small_pressed(4, 4)
 	check(sent.is_empty(), "no puedo jugar fuera de mi turno")
 	online.apply_move({"big": 4, "small": 4, "player": 1, "clocks": [35000, 30000]})
-	check(online.small_buttons[4][4].text == "X", "la jugada del servidor se dibuja")
+	check(online.cell_text(4, 4) == "X", "la jugada del servidor se dibuja")
 	check(online.status_label.text.begins_with("Tu turno"), "ahora es mi turno")
 	online._on_small_pressed(4, 0)
 	check(sent == [[4, 0]], "mi jugada se pide al servidor")
-	check(online.small_buttons[4][0].text == "", "no se dibuja hasta que el servidor confirme")
+	check(online.cell_text(4, 0) == "", "no se dibuja hasta que el servidor confirme")
 	check(online.clock_labels[1].text.contains("0:35"), "el reloj de Ana muestra el banco con incremento")
 	# El servidor confirma mi jugada; después a Ana (X) se le acaba el tiempo.
 	online.apply_move({"big": 4, "small": 0, "player": 2, "clocks": [35000, 35000]})
 	check(online.game.current_player == 1, "tras mi jugada le toca a Ana")
 	online.apply_skip({"player": 1, "skips": [1, 0], "clocks": [10000, 35000]})
 	check(online.game.current_player == 2, "si le saltan el turno a Ana, me toca a mí")
-	check(online.small_buttons[4][0].text == "", "mi última jugada se deshace para volver a elegirla")
+	check(online.cell_text(4, 0) == "", "mi última jugada se deshace para volver a elegirla")
 	check(online.clock_labels[1].text.contains("Saltos 1/3"), "se muestra el contador de saltos")
 	online.apply_over({"winner": 2, "reason": "skips", "clocks": [1000, 20000]})
 	check(online.status_label.text.begins_with("Ganaste"), "mensaje de victoria")

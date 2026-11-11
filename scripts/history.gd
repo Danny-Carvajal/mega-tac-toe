@@ -38,8 +38,8 @@ static func decode(text: String) -> Array:
 
 
 ## Arma el registro de una partida terminada.
-static func make_record(names: Array, colors: Array, my_seat: int, winner: int, reason: String, log: Array) -> Dictionary:
-	return {
+static func make_record(names: Array, colors: Array, my_seat: int, winner: int, reason: String, log: Array, figures: Array = []) -> Dictionary:
+	var record := {
 		"t": int(Time.get_unix_time_from_system()),
 		"n": names,
 		"c": colors,
@@ -48,6 +48,9 @@ static func make_record(names: Array, colors: Array, my_seat: int, winner: int, 
 		"r": reason,
 		"m": encode(log),
 	}
+	if figures.size() == 2:
+		record["f"] = figures  # [figura de X, figura de O] que se usaron
+	return record
 
 
 func add(record: Dictionary) -> void:

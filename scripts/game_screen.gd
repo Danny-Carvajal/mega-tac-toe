@@ -5,6 +5,8 @@ extends Control
 signal move_requested(big: int, small: int)
 signal resign_requested
 signal exit_requested
+## Terminó una partida de práctica (la app da las monedas). `won` es true si ganó la persona.
+signal practice_over(won: bool, level: int)
 
 const Pal := preload("res://scripts/pal.gd")
 const History := preload("res://scripts/history.gd")
@@ -13,6 +15,8 @@ const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const UltimateAI := preload("res://scripts/ai.gd")
 const IntroScreen := preload("res://scripts/intro_screen.gd")
+const Cosmetics := preload("res://scripts/cosmetics.gd")
+const FigureView := preload("res://scripts/figure_view.gd")
 
 ## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
 const ARROW_ALPHA := 0.7
@@ -124,13 +128,19 @@ var new_game_button: Button
 var panels: Array[PanelContainer] = []
 var grids: Array[GridContainer] = []
 var result_labels: Array[Label] = []
+var result_figs: Array = []
+## Cosméticos de quien está en cada asiento (índice 1 = X, 2 = O): {fx, fo, b, n}.
+var seat_cos: Array = [{}, {}, {}]
+## Monedas ganadas al terminar, para el cartel final.
+var coins_note := ""
 ## small_buttons[big][small] -> Button
 var small_buttons: Array = []
 
 
 ## Juego local: los dos jugadores comparten el cel, sin reloj.
-func setup_local(profile: Profile) -> void:
+func setup_local(profile: Profile, my_cos: Dictionary = {}) -> void:
 	online = false
+	seat_cos = [{}, my_cos, my_cos]
 	arrow_tip_color = profile.color_x
 	arrow_base_color = profile.color_o
 	colors = [Pal.muted, profile.color_x, profile.color_o]
@@ -138,8 +148,9 @@ func setup_local(profile: Profile) -> void:
 
 
 ## Práctica contra la IA: la persona juega con X (empieza) y la IA con O.
-func setup_practice(profile: Profile, level: int) -> void:
+func setup_practice(profile: Profile, level: int, my_cos: Dictionary = {}) -> void:
 	online = false
+	seat_cos = [{}, my_cos, {}]
 	vs_ai = true
 	ai_level = clampi(level, 1, 5)
 	my_seat = UltimateGame.X
@@ -166,6 +177,9 @@ func setup_replay(record: Dictionary) -> void:
 	_resolve_color_clash()
 	arrow_tip_color = colors[1]
 	arrow_base_color = colors[2]
+	var recorded_figures: Array = record.get("f", [])
+	if recorded_figures.size() == 2:
+		seat_cos = [{}, {"fx": recorded_figures[0]}, {"fo": recorded_figures[1]}]
 	_result_shown = true  # en la repetición no sale el cartel de fin
 
 
@@ -192,6 +206,7 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 	if int(start.get("rules", 1)) != UltimateGame.RULES_VERSION:
 		_notice = "El servidor tiene otras reglas (todavía no se actualizó). Algunas jugadas no van a pasar."
 		_notice_until_ms = 1 << 60
+	_read_cosmetics(start.get("cosmetics", []))
 	var clocks: Array = start.get("clocks", [0, 0])
 	clocks_ms = [0, int(clocks[0]), int(clocks[1])]
 	intro_ms = int(start.get("intro_ms", 0))
@@ -216,6 +231,8 @@ func _start_intro() -> void:
 	intro.opponent_name = names[3 - my_seat]
 	intro.my_seat = my_seat
 	intro.mark_colors = colors
+	intro.my_cos = seat_cos[my_seat]
+	intro.opponent_cos = seat_cos[3 - my_seat]
 	intro.duration_ms = intro_ms
 	intro.finished.connect(_end_intro)
 	add_child(intro)
@@ -263,6 +280,55 @@ func show_notice(text: String, duration_ms := 3500) -> void:
 
 func _exit_tree() -> void:
 	_ai_cancel()
+
+
+# --- Cosméticos -------------------------------------------------------------
+
+## Lee los cosméticos de los dos asientos que manda el servidor ([{fx, fo, b, n}, {...}]).
+func _read_cosmetics(raw: Variant) -> void:
+	if typeof(raw) != TYPE_ARRAY or raw.size() != 2:
+		return
+	seat_cos = [{}, _clean_cos(raw[0]), _clean_cos(raw[1])]
+
+
+func _clean_cos(raw: Variant) -> Dictionary:
+	var source: Dictionary = raw if typeof(raw) == TYPE_DICTIONARY else {}
+	return {
+		"fx": Cosmetics.safe(source.get("fx", ""), "fx"),
+		"fo": Cosmetics.safe(source.get("fo", ""), "fo"),
+		"b": Cosmetics.safe(source.get("b", ""), "banner"),
+		"n": Cosmetics.safe(source.get("n", ""), "font"),
+	}
+
+
+## Figura con la que se dibuja la marca de ese lado: la X usa la figura de X de quien juega con X, y la O la de O.
+func _mark_figure(mark: int) -> String:
+	if mark == UltimateGame.X:
+		return Cosmetics.safe(seat_cos[1].get("fx", ""), "fx")
+	if mark == UltimateGame.O:
+		return Cosmetics.safe(seat_cos[2].get("fo", ""), "fo")
+	if mark == UltimateGame.DRAW:
+		return "draw"
+	return ""
+
+
+## La figura que se dibuja encima de un botón (se crea la primera vez).
+func _figure_in(button: Control) -> Control:
+	var view: Control = button.get_node_or_null("fig")
+	if view == null:
+		view = FigureView.new()
+		view.name = "fig"
+		button.add_child(view)
+		view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	return view
+
+
+## Qué marca se ve en una casilla ("X", "O" o vacío), según lo que está dibujado.
+func cell_text(big: int, small: int) -> String:
+	var view: Control = small_buttons[big][small].get_node_or_null("fig")
+	if view == null or not view.visible:
+		return ""
+	return _mark_text(game.get_cell(big, small))
 
 
 # --- IA (modo práctica) -----------------------------------------------------
@@ -371,6 +437,8 @@ func apply_over(data: Dictionary) -> void:
 		_result_title = "PERDISTE"
 		_result_color = COLOR_LOSS
 		_result_sub = _reason_suffix(reason, false).strip_edges().trim_prefix("(").trim_suffix(")")
+	if not coins_note.is_empty():
+		_result_sub += ("\n" if not _result_sub.is_empty() else "") + coins_note
 	_refresh()
 
 
@@ -399,6 +467,8 @@ func apply_resume(data: Dictionary) -> void:
 	if intro_layer != null:  # reconectó en plena presentación: se salta
 		intro_layer.queue_free()
 		intro_layer = null
+	if data.has("cosmetics"):
+		_read_cosmetics(data["cosmetics"])
 	game = UltimateGame.new()
 	last_move = Vector2i(-1, -1)
 	for entry in data.get("log", []):
@@ -442,6 +512,7 @@ func restore_payload(token: String) -> Dictionary:
 		"names": _start_names,
 		"colors": _start_colors,
 		"log": move_log,
+		"cosmetics": [seat_cos[1], seat_cos[2]],
 		"skips": [skips[1], skips[2]],
 		"clocks": clocks,
 	}
@@ -684,6 +755,11 @@ func _build_big_cell(parent: GridContainer, big: int) -> void:
 	result_label.visible = false
 	panel.add_child(result_label)
 	result_labels.append(result_label)
+	var result_fig := FigureView.new()
+	result_fig.visible = false
+	panel.add_child(result_fig)
+	result_fig.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	result_figs.append(result_fig)
 
 
 # --- Acciones del jugador ---------------------------------------------------
@@ -856,6 +932,10 @@ func _check_result_overlay() -> void:
 			_result_title = "¡GANÓ %s!" % _mark_text(game.result)
 			_result_color = _mark_color(game.result)
 		_result_sub = "Práctica contra %s" % names[ai_seat] if vs_ai else ""
+		if vs_ai:
+			practice_over.emit(game.result == my_seat, ai_level)  # la app da las monedas y deja la nota
+		if not coins_note.is_empty():
+			_result_sub += ("\n" if not _result_sub.is_empty() else "") + coins_note
 	else:
 		return
 	_show_result_overlay()
@@ -1159,7 +1239,10 @@ func _refresh() -> void:
 		for small in 9:
 			var mark := game.get_cell(big, small)
 			var button: Button = small_buttons[big][small]
-			button.text = _mark_text(mark)
+			var figure := _figure_in(button)
+			figure.visible = mark != UltimateGame.NONE
+			if mark != UltimateGame.NONE:
+				figure.set_figure(_mark_figure(mark), _mark_color(mark))
 			if mark != UltimateGame.NONE and _prev_cells[big * 9 + small] == UltimateGame.NONE:
 				if not replay:
 					Fx.pop(button)
@@ -1168,16 +1251,16 @@ func _refresh() -> void:
 			button.disabled = not (can_play and legal.has(Vector2i(big, small)))
 			button.add_theme_color_override("font_disabled_color", _mark_color(mark))
 
-		var label := result_labels[big]
-		label.visible = decided
-		label.text = _mark_text(board_result)
-		# Translúcida para que se vean y se puedan tocar las casillas de abajo.
-		var label_color := _mark_color(board_result)
-		label_color.a = 0.3
-		label.add_theme_color_override("font_color", label_color)
+		var result_fig: Control = result_figs[big]
+		result_fig.visible = decided
+		if decided:
+			# Translúcida para que se vean y se puedan tocar las casillas de abajo.
+			var fig_color := _mark_color(board_result)
+			fig_color.a = 0.3
+			result_fig.set_figure(_mark_figure(board_result), fig_color)
 		if decided and _prev_results[big] == UltimateGame.NONE:
-			Fx.fade_in(label, 0.35)
-			Fx.pop(label, 0.4, 0.45)
+			Fx.fade_in(result_fig, 0.35)
+			Fx.pop(result_fig, 0.4, 0.45)
 
 	_prev_cells.assign(game.cells)
 	_prev_results.assign(game.board_results)

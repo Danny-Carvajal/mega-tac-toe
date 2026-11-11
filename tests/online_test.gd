@@ -25,8 +25,8 @@ func _run() -> void:
 		check(await _wait_open(p), "cliente conectado")
 
 	# --- Partida rápida: se emparejan, se sortean los turnos ---
-	var qa := {"t": "queue", "name": "Ana", "colors": {"x": "#ff0000", "o": "#00ff00"}}
-	var qb := {"t": "queue", "name": "Beto", "colors": {"x": "#0000ff", "o": "#ffff00"}}
+	var qa := {"t": "queue", "name": "Ana", "colors": {"x": "#ff0000", "o": "#00ff00"}, "cos": {"fx": "star", "fo": "moon", "b": "banner_gold", "n": "font_fire"}}
+	var qb := {"t": "queue", "name": "Beto", "colors": {"x": "#0000ff", "o": "#ffff00"}, "cos": {"fx": "heart", "fo": "<bad>", "b": "banner_neon"}}
 	a.client.send(qa)
 	check((await _next(a, "waiting")).has("t"), "el primero queda esperando")
 	b.client.send(qb)
@@ -35,6 +35,11 @@ func _run() -> void:
 	check(not sa.is_empty() and not sb.is_empty(), "los dos reciben start")
 	check(sa.you != sb.you, "cada uno tiene un asiento distinto")
 	check(sa.colors == sb.colors, "los dos ven los mismos colores")
+	check(sa.cosmetics == sb.cosmetics and sa.cosmetics.size() == 2, "los dos reciben los cosméticos de los dos jugadores")
+	var ana_cos: Dictionary = sa.cosmetics[0 if sa.you == 1 else 1]
+	var beto_cos: Dictionary = sa.cosmetics[1 if sa.you == 1 else 0]
+	check(ana_cos.get("fx") == "star" and ana_cos.get("b") == "banner_gold" and ana_cos.get("n") == "font_fire", "el servidor pasa los cosméticos de Ana")
+	check(beto_cos.get("fx") == "heart" and beto_cos.get("fo") == "o_classic" and beto_cos.get("n") == "font_classic", "un id inválido vuelve al de inicio y lo que falta se completa")
 	var first: Probe = a if sa.you == 1 else b
 	var second: Probe = b if first == a else a
 

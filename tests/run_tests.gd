@@ -6,6 +6,8 @@ const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const TurnClock := preload("res://scripts/turn_clock.gd")
 const History := preload("res://scripts/history.gd")
 const UltimateAI := preload("res://scripts/ai.gd")
+const Cosmetics := preload("res://scripts/cosmetics.gd")
+const Collection := preload("res://scripts/collection.gd")
 
 var failures := 0
 
@@ -31,6 +33,8 @@ func _init() -> void:
 	test_ai_moves_are_legal()
 	test_ai_finds_the_winning_move()
 	test_ai_levels_get_stronger()
+	test_cosmetics_catalog()
+	test_collection_boxes()
 
 	if failures == 0:
 		print("OK: todos los tests pasaron")
@@ -319,3 +323,68 @@ func test_ai_levels_get_stronger() -> void:
 			elif game.result != UltimateGame.DRAW:
 				weak_wins += 1
 		check(strong_wins > weak_wins, "el nivel %d le gana al nivel %d (%d-%d)" % [strong, weak, strong_wins, weak_wins])
+
+
+# --- Cosméticos y cajas ------------------------------------------------------
+
+func test_cosmetics_catalog() -> void:
+	check(Cosmetics.items_of_kind("fx").size() == 10 and Cosmetics.items_of_kind("fo").size() == 10, "hay 10 figuras por lado")
+	var ids := {}
+	var unique := true
+	for entry in Cosmetics.all_items():
+		if ids.has(entry["id"]):
+			unique = false
+		ids[entry["id"]] = true
+	check(unique, "los ids de los cosméticos no se repiten")
+	var rarities_ok := true
+	for rarity in 4:
+		var count := 0
+		for entry in Cosmetics.droppable():
+			if entry["rarity"] == rarity:
+				count += 1
+		if count == 0:
+			rarities_ok = false
+	check(rarities_ok, "cada rareza tiene cosméticos para ganar en cajas")
+	check(Cosmetics.safe("star", "fx") == "star" and Cosmetics.safe("star", "fo") == "o_classic" and Cosmetics.safe("hack<>", "banner") == "banner_classic",
+			"un id desconocido o de otro tipo vuelve al de inicio")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var counts := [0, 0, 0, 0]
+	for i in 4000:
+		counts[Cosmetics.roll(rng)["rarity"]] += 1
+	check(counts[0] > counts[1] and counts[1] > counts[2] and counts[2] > counts[3] and counts[3] > 0, "las cajas dan más comunes que raras, y así hasta legendarias")
+
+
+func test_collection_boxes() -> void:
+	var collection := Collection.new()
+	collection.path = "user://test_collection.json"
+	collection.coins = 700
+	var first := collection.open_box()
+	check(not first.is_empty() and collection.coins == 400 + first["refund"], "abrir una caja cuesta %d monedas" % Cosmetics.BOX_PRICE)
+	check(collection.owns(first["item"]["id"]), "lo que sale en la caja queda en la colección")
+	collection.coins = 100
+	check(collection.open_box().is_empty() and collection.coins == 100, "sin monedas suficientes no se abre")
+	check(not collection.equip("moon") or collection.owns("moon"), "solo se equipa lo que se tiene")
+	collection.owned["star"] = true
+	check(collection.equip("star") and collection.equipped["fx"] == "star", "equipar una figura de X")
+	check(not collection.equip("moon") and collection.equipped["fo"] == "o_classic", "no se equipa lo que no se tiene")
+	collection.equipped["fo"] = "o_classic"
+	check(collection.equip("banner_classic") and collection.equip("font_classic"), "lo de inicio siempre se puede equipar")
+	# Duplicados: devuelven monedas según la rareza
+	var dup := Collection.new()
+	dup.path = "user://test_collection.json"
+	for entry in Cosmetics.droppable():
+		dup.owned[entry["id"]] = true
+	dup.coins = 300
+	var again := dup.open_box()
+	check(again["duplicate"] and dup.coins == Cosmetics.REFUND[again["item"]["rarity"]], "una repetida devuelve monedas")
+	# Guardar y cargar
+	collection.coins = 555
+	collection.save_to_disk()
+	var loaded := Collection.new()
+	loaded.path = "user://test_collection.json"
+	loaded.load_from_disk()
+	check(loaded.coins == 555 and loaded.equipped["fx"] == "star" and loaded.owns("star"), "la colección se guarda y se carga")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_collection.json"))
+	var payload := collection.equipped_payload()
+	check(payload["fx"] == "star" and payload.has("b") and payload.has("n"), "el paquete para el servidor lleva figura, banner y fuente")

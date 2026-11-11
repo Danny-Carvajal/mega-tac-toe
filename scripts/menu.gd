@@ -6,6 +6,7 @@ extends Control
 signal appearance_changed
 signal history_requested
 signal local_requested
+signal shop_requested
 signal practice_requested(level: int)
 signal online_requested(kind: String, code: String)
 signal cancel_requested
@@ -30,6 +31,8 @@ const COLOR_WIN := Color("3ecf8e")
 const COLOR_LOSS := Color("e5484d")
 
 var profile: Profile
+var collection  # Collection (monedas), para el botón de la tienda
+var shop_button: Button
 var color_x: Color
 var color_o: Color
 var selected_mark := "X"
@@ -244,6 +247,23 @@ func _build_main_page() -> void:
 	server_button.offset_right = -24.0
 	server_button.offset_top = 24.0
 	server_button.offset_bottom = 104.0
+
+	# Tienda en la otra esquina: muestra las monedas y abre cajas y colección.
+	shop_button = _make_small_button("Tienda  %d" % (collection.coins if collection != null else 0))
+	shop_button.custom_minimum_size = Vector2(0, 80)
+	shop_button.add_theme_font_size_override("font_size", 32)
+	_action_buttons.append(shop_button)
+	shop_button.pressed.connect(func() -> void:
+		if _taps_allowed():
+			_save_profile()
+			shop_requested.emit())
+	main_page.add_child(shop_button)
+	shop_button.anchor_left = 0.0
+	shop_button.anchor_right = 0.0
+	shop_button.offset_left = 24.0
+	shop_button.offset_right = 300.0
+	shop_button.offset_top = 24.0
+	shop_button.offset_bottom = 104.0
 
 	var title := Label.new()
 	title.text = "Mega Tac Toe"

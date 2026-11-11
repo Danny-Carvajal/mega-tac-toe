@@ -9,6 +9,9 @@ signal finished
 
 const Pal := preload("res://scripts/pal.gd")
 const Fx := preload("res://scripts/fx.gd")
+const Cosmetics := preload("res://scripts/cosmetics.gd")
+const FigureView := preload("res://scripts/figure_view.gd")
+const BannerView := preload("res://scripts/banner_view.gd")
 
 ## Cómo se reparte el tiempo total: VS, moneda girando y resultado.
 const VS_FRACTION := 0.45
@@ -22,12 +25,15 @@ var my_seat := 1
 ## Colores de la X y la O (índice 1 y 2), para pintar el resultado.
 var mark_colors: Array = [Color.WHITE, Color("e5484d"), Color("3b82f6")]
 var duration_ms := 8500
+## Cosméticos de cada jugador ({fx, fo, b, n}); si faltan, se usan los de inicio.
+var my_cos: Dictionary = {}
+var opponent_cos: Dictionary = {}
 
 var coin: Coin
 var vs_label: Label
 var result_label: Label
 var cards: Array[PanelContainer] = []  # 0 = rival, 1 = yo
-var badges: Array[Label] = []
+var badges: Array = []
 
 var _started_ms := 0
 var _phase := 0  # 0 VS, 1 moneda, 2 resultado, 3 terminó
@@ -73,8 +79,8 @@ func _ready() -> void:
 	center.add_child(layout)
 
 	# Vertical: rival arriba, VS en el medio, yo abajo. Ancho: yo a la izquierda, rival a la derecha.
-	var opponent_card := _make_card(opponent_name)
-	var my_card := _make_card(my_name)
+	var opponent_card := _make_card(opponent_name, opponent_cos)
+	var my_card := _make_card(my_name, my_cos)
 	vs_label = Label.new()
 	vs_label.text = "VS"
 	vs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -130,16 +136,21 @@ func _ready() -> void:
 			Fx.pop(vs_label, 2.2, 0.45))
 
 
-func _make_card(player_name: String) -> PanelContainer:
+func _make_card(player_name: String, cos: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(900 if not _wide else 640, 280)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Pal.card
+	style.bg_color = Color(0, 0, 0, 0)
 	style.border_color = Pal.active
 	style.set_border_width_all(6)
 	style.set_corner_radius_all(28)
 	style.set_content_margin_all(30)
 	card.add_theme_stylebox_override("panel", style)
+	# El banner va de fondo (los hijos de un PanelContainer se apilan).
+	var banner := BannerView.new()
+	banner.radius = 24.0
+	banner.set_banner(Cosmetics.safe(cos.get("b", ""), "banner"))
+	card.add_child(banner)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 24)
 	card.add_child(row)
@@ -150,17 +161,26 @@ func _make_card(player_name: String) -> PanelContainer:
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	name_label.add_theme_font_size_override("font_size", 96)
-	name_label.add_theme_color_override("font_color", Pal.text)
+	name_label.add_theme_color_override("font_color", Color.WHITE if cos.has("b") and cos["b"] != "banner_classic" else Pal.text)
+	Cosmetics.apply_font(name_label, Cosmetics.safe(cos.get("n", ""), "font"))
 	row.add_child(name_label)
-	# Aquí aparece la X o la O que le toca, cuando la moneda cae.
-	var badge := Label.new()
-	badge.text = ""
-	badge.add_theme_font_size_override("font_size", 150)
+	# Antes de la moneda: las dos figuras del jugador. Cuando cae, queda solo la del lado que le tocó.
+	var preview := VBoxContainer.new()
+	preview.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	preview.add_theme_constant_override("separation", 8)
+	for kind in ["fx", "fo"]:
+		var small_fig := FigureView.new()
+		small_fig.custom_minimum_size = Vector2(96, 96)
+		small_fig.set_figure(Cosmetics.safe(cos.get(kind, ""), kind), Color.WHITE if kind == "fx" else Color(0.85, 0.9, 1.0))
+		preview.add_child(small_fig)
+	row.add_child(preview)
+	var badge := FigureView.new()
+	badge.custom_minimum_size = Vector2(200, 200)
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.custom_minimum_size = Vector2(130, 0)
 	badge.visible = false
 	row.add_child(badge)
 	badges.append(badge)
+	card.set_meta("preview", preview)
 	return card
 
 
@@ -235,7 +255,9 @@ func _show_result() -> void:
 		var style := card.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
 		style.border_color = color
 		card.add_theme_stylebox_override("panel", style)
-		badges[i].text = "X" if seat == 1 else "O"
-		badges[i].add_theme_color_override("font_color", color)
+		var player_cos: Dictionary = my_cos if i == 1 else opponent_cos
+		var kind := "fx" if seat == 1 else "fo"
+		badges[i].set_figure(Cosmetics.safe(player_cos.get(kind, ""), kind), color)
 		badges[i].visible = true
+		(card.get_meta("preview") as Control).visible = false
 		Fx.pop(badges[i], 0.4, 0.4)

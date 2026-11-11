@@ -99,3 +99,12 @@ La persona es X y empieza. La IA piensa en un hilo aparte (en la web, sin hilos,
 Al emparejarse, el servidor da `intro_ms` (8,5 s por defecto, `--intro=` para cambiarlo) de presentación: VS con los dos jugadores,
 moneda animada y la marca que le tocó a cada uno (X siempre empieza). El servidor ya sorteó el asiento; el cliente solo lo anima
 (`scripts/intro_screen.gd`). En ese tiempo no se aceptan jugadas y el reloj de X todavía no corre. Un servidor viejo no manda `intro_ms`: sin presentación.
+
+## Tienda, cajas y cosméticos
+
+Botón "Tienda" (arriba a la izquierda del menú, con las monedas). Hay 3 tipos de cosméticos, todos dibujados por código (`scripts/cosmetics.gd`):
+figuras (10 para la X y 10 para la O, `figure_view.gd`), banners (13, `banner_view.gd`) y fuentes del nombre (9). Rarezas: común, rara, épica y legendaria.
+Una caja cuesta 300 monedas (60 % común, 28 % rara, 9 % épica, 3 % legendaria); si sale una repetida devuelve monedas según la rareza.
+Monedas: online 100 por ganar, 50 por empatar y 25 por perder; en práctica ganar da de 5 a 25 según el nivel de la IA. Se empieza con 600.
+Lo que tenés se guarda en el dispositivo (`scripts/collection.gd`, `user://collection.json`). Online, el servidor solo le pasa tus cosméticos al rival
+(valida que los ids tengan forma válida; el cliente cae a los de inicio si no los conoce). El VS muestra banner, fuente y figuras de cada jugador.

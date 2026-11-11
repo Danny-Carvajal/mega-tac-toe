@@ -32,6 +32,8 @@ const TurnClock := preload("res://scripts/turn_clock.gd")
 
 const ROOM_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const DEFAULT_COLORS := {"x": "#e5484d", "o": "#3b82f6"}
+## Cosméticos de inicio: figura de X, figura de O, banner y fuente (el servidor solo los pasa al rival).
+const DEFAULT_COS := {"fx": "x_classic", "fo": "o_classic", "b": "banner_classic", "n": "font_classic"}
 
 const MAX_SKIPS := 3
 ## Si no llega ningún mensaje en este tiempo, la conexión se da por muerta (el cliente manda ping cada 25 s).
@@ -58,6 +60,7 @@ var _sessions: Array[Session] = []
 var _restoring := {}  # sid -> {seats: {1: {conn, msg}, 2: ...}, since}
 var _rng := RandomNumberGenerator.new()
 var _color_regex := RegEx.create_from_string("^#[0-9a-fA-F]{6}$")
+var _id_regex := RegEx.create_from_string("^[a-z0-9_]{1,24}$")
 
 
 class Conn:
@@ -65,6 +68,7 @@ class Conn:
 	var ws: WebSocketPeer
 	var player_name := "Jugador"
 	var colors := DEFAULT_COLORS.duplicate()
+	var cos := DEFAULT_COS.duplicate()
 	var session: Session = null
 	var seat := 0
 	var last_seen_ms := 0
@@ -81,6 +85,8 @@ class Session:
 	var sid := ""
 	var names: Array = []
 	var colors: Array = []
+	## Cosméticos de cada asiento ({fx, fo, b, n}); el rival los ve en la presentación y en el tablero.
+	var cosmetics: Array = []
 	## Jugadas en orden: [big, small] o "s" (salto). Sirve para reconstruir la partida al reanudar.
 	var log: Array = []
 	## Desde cuándo está desconectado cada asiento (0 = conectado).
@@ -192,7 +198,19 @@ func _on_message(conn: Conn, text: String) -> void:
 			_send(conn, {"t": "pong"})
 
 
+## Deja solo ids con forma válida (letras, números y guion bajo); lo demás vuelve al valor de inicio.
+func _clean_cos(raw: Variant) -> Dictionary:
+	var result := DEFAULT_COS.duplicate()
+	if typeof(raw) == TYPE_DICTIONARY:
+		for key in DEFAULT_COS.keys():
+			var id := str(raw.get(key, ""))
+			if _id_regex.search(id) != null:
+				result[key] = id
+	return result
+
+
 func _read_profile(conn: Conn, msg: Dictionary) -> void:
+	conn.cos = _clean_cos(msg.get("cos", {}))
 	conn.player_name = str(msg.get("name", "Jugador")).strip_edges().left(16)
 	if conn.player_name.is_empty():
 		conn.player_name = "Jugador"
@@ -260,6 +278,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 	session.seats[2] = b
 	session.names = [a.player_name, b.player_name]
 	session.colors = [a.colors["x"], b.colors["o"]]
+	session.cosmetics = [a.cos, b.cos]
 	var crypto := Crypto.new()
 	session.sid = crypto.generate_random_bytes(8).hex_encode()
 	session.tokens[1] = crypto.generate_random_bytes(12).hex_encode()
@@ -288,6 +307,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 			"max_skips": MAX_SKIPS,
 			"rules": UltimateGame.RULES_VERSION,
 			"intro_ms": intro_ms,
+			"cosmetics": session.cosmetics,
 			"clocks": session.clock.snapshot(now),
 		})
 
@@ -422,6 +442,7 @@ func _resume(conn: Conn, token: String) -> void:
 					"you": seat,
 					"names": session.names,
 					"colors": session.colors,
+					"cosmetics": session.cosmetics,
 					"max_skips": MAX_SKIPS,
 					"rules": UltimateGame.RULES_VERSION,
 					"clocks": session.clock.snapshot(now),
@@ -498,6 +519,9 @@ func _restore(conn: Conn, msg: Dictionary) -> void:
 		for i in 2:
 			if _color_regex.search(str(colors[i])) != null:
 				session.colors[i] = str(colors[i])
+	var raw_cos = msg1.get("cosmetics", [])
+	session.cosmetics = [_clean_cos(raw_cos[0]), _clean_cos(raw_cos[1])] if typeof(raw_cos) == TYPE_ARRAY and raw_cos.size() == 2 \
+			else [DEFAULT_COS.duplicate(), DEFAULT_COS.duplicate()]
 	for seat_key in [1, 2]:
 		var m: Dictionary = seats[seat_key]["msg"]
 		var c: Conn = seats[seat_key]["conn"]
@@ -523,6 +547,7 @@ func _restore(conn: Conn, msg: Dictionary) -> void:
 			"you": seat_key,
 			"names": session.names,
 			"colors": session.colors,
+			"cosmetics": session.cosmetics,
 			"max_skips": MAX_SKIPS,
 			"rules": UltimateGame.RULES_VERSION,
 			"clocks": session.clock.snapshot(now),
