@@ -103,6 +103,55 @@ func _run() -> void:
 	check(won.small_buttons[0][0].disabled, "las ocupadas no")
 	won.queue_free()
 
+	# --- Resaltado de la última jugada, apuntes con flechas y confirmación de rendirse ---
+	var fx := GameScreen.new()
+	fx.setup_local(Profile.new())
+	root.add_child(fx)
+	fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	await process_frame
+	await process_frame
+	fx._on_small_pressed(4, 2)
+	check(fx._highlighted == Vector2i(4, 2), "se resalta la última jugada")
+	fx._on_small_pressed(2, 5)
+	check(fx._highlighted == Vector2i(2, 5), "el resaltado sigue a la última jugada")
+	fx.notes_button.button_pressed = true
+	check(fx.notes_mode and fx.clear_notes_button.visible, "el toggle de apuntes activa el modo y muestra Borrar")
+	fx._toggle_arrow(Vector2i(0, 0), Vector2i(4, 4))
+	check(fx.arrows.size() == 1, "se agrega una flecha")
+	fx._toggle_arrow(Vector2i(0, 0), Vector2i(4, 4))
+	check(fx.arrows.is_empty(), "dibujar la misma flecha otra vez la borra")
+	var from_point: Vector2 = fx._cell_center(Vector2i(0, 0))
+	var to_point: Vector2 = fx._cell_center(Vector2i(8, 8))
+	await _drag(from_point, to_point)
+	check(fx.arrows.size() == 1 and fx.arrows[0]["from"] == Vector2i(0, 0) and fx.arrows[0]["to"] == Vector2i(8, 8), "arrastrar dibuja una flecha")
+	var middle := (from_point + to_point) / 2.0
+	await _drag(middle, middle)
+	check(fx.arrows.is_empty(), "tocar una flecha la borra")
+	fx._toggle_arrow(Vector2i(1, 1), Vector2i(2, 2))
+	fx.clear_notes_button.pressed.emit()
+	check(fx.arrows.is_empty(), "Borrar limpia todas las flechas")
+	fx.queue_free()
+
+	var start2 := {
+		"t": "start", "you": 2, "names": ["Ana", "Beto"], "rules": 2,
+		"colors": ["#e5484d", "#3b82f6"], "clocks": [60000, 60000],
+	}
+	var online2 := GameScreen.new()
+	online2.setup_online(start2, Profile.new())
+	root.add_child(online2)
+	await process_frame
+	var resigned: Array = []
+	online2.resign_requested.connect(func() -> void: resigned.append(1))
+	online2.left_button.pressed.emit()
+	check(online2.confirm_layer.visible and resigned.is_empty(), "rendirse pide confirmación")
+	online2._confirm_resign()
+	check(resigned.size() == 1 and not online2.confirm_layer.visible, "confirmar rinde y cierra el diálogo")
+	online2.apply_move({"big": 4, "small": 2, "clocks": [60000, 60000]})
+	check(online2._highlighted == Vector2i(4, 2), "online: se resalta la jugada del rival")
+	online2.apply_move({"big": 2, "small": 5, "clocks": [60000, 60000]})
+	check(online2._highlighted == Vector2i(-1, -1), "online: mi propia jugada no se resalta")
+	online2.queue_free()
+
 	# --- Juego online (mensajes del servidor simulados) ---
 	var start := {
 		"t": "start", "you": 2, "names": ["Ana", "Beto"],
@@ -149,6 +198,23 @@ func _run() -> void:
 	else:
 		print("FALLARON %d checks" % failures)
 	quit(1 if failures > 0 else 0)
+
+
+func _drag(from: Vector2, to: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = from
+	root.push_input(press, true)
+	var move := InputEventMouseMotion.new()
+	move.position = to
+	root.push_input(move, true)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = to
+	root.push_input(release, true)
+	await process_frame
 
 
 func _swipe(from: Vector2, to: Vector2) -> void:

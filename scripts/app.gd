@@ -5,6 +5,7 @@ const Menu := preload("res://scripts/menu.gd")
 const GameScreen := preload("res://scripts/game_screen.gd")
 const NetClient := preload("res://scripts/net_client.gd")
 const Profile := preload("res://scripts/profile.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 var profile := Profile.new()
 var net: Node
@@ -39,6 +40,8 @@ func _notification(what: int) -> void:
 			get_tree().quit()
 	elif not game_screen.online or game_screen.finished:
 		show_menu()
+	else:
+		game_screen.ask_resign()
 
 
 func show_menu(status: String = "") -> void:
@@ -61,6 +64,7 @@ func _show(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if screen.has_method("apply_layout"):
 		screen.apply_layout(wide)
+	Fx.fade_in(screen, 0.22)
 
 
 ## Elige el layout según la forma de la ventana: vertical (celular) o ancho (compu).

@@ -8,6 +8,7 @@ signal exit_requested
 
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Profile := preload("res://scripts/profile.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 const COLOR_BG := Color("14151f")
 const COLOR_PANEL := Color("22253a")
@@ -15,6 +16,7 @@ const COLOR_ACTIVE := Color("3d4a7a")
 const COLOR_CELL := Color("2d3048")
 const COLOR_DRAW := Color("8a8fa8")
 const COLOR_TEXT := Color("e8eaf6")
+const ARROW_COLOR := Color(0.22, 0.74, 0.97, 0.55)
 
 var game := UltimateGame.new()
 var online := false
@@ -42,6 +44,27 @@ var buttons_row: BoxContainer
 var ratio_box: AspectRatioContainer
 var side_box: VBoxContainer
 var side_spacer: Control
+
+## Última jugada (para resaltarla) y marcas ya dibujadas (para animar las nuevas).
+var last_move := Vector2i(-1, -1)
+var last_move_player := 0
+var _highlighted := Vector2i(-1, -1)
+var _highlight_tween: Tween
+var _prev_cells: Array[int] = []
+var _prev_results: Array[int] = []
+
+## Apuntes: flechas semitransparentes que el jugador dibuja arrastrando sobre el tablero.
+var notes_mode := false
+var arrows: Array[Dictionary] = []
+var notes_button: Button
+var clear_notes_button: Button
+var notes_layer: Control
+var big_grid: GridContainer
+var _drag_from := Vector2i(-1, -1)
+var _drag_point := Vector2.ZERO
+
+## Confirmación de rendirse.
+var confirm_layer: Control
 
 var status_label: Label
 var clock_labels: Array = [null, null, null]
@@ -108,7 +131,11 @@ func show_notice(text: String, duration_ms := 3500) -> void:
 func apply_move(data: Dictionary) -> void:
 	var big := int(data.get("big", -1))
 	var small := int(data.get("small", -1))
-	if not game.play(big, small):
+	var mover := game.current_player
+	if game.play(big, small):
+		last_move = Vector2i(big, small)
+		last_move_player = mover
+	else:
 		push_warning("El servidor mandó una jugada que no es legal acá: %d,%d" % [big, small])
 	_set_clocks(data)
 	_refresh()
@@ -117,6 +144,7 @@ func apply_move(data: Dictionary) -> void:
 ## Al jugador de turno se le acabó el tiempo: le saltan el turno sin jugar.
 func apply_skip(data: Dictionary) -> void:
 	game.skip_turn()
+	last_move = Vector2i(-1, -1)  # la jugada anterior se deshizo
 	var counts: Array = data.get("skips", [])
 	if counts.size() == 2:
 		skips = [0, int(counts[0]), int(counts[1])]
@@ -224,7 +252,7 @@ func _build_ui() -> void:
 	root.add_child(ratio)
 	ratio_box = ratio
 
-	var big_grid := GridContainer.new()
+	big_grid = GridContainer.new()
 	big_grid.columns = 3
 	big_grid.add_theme_constant_override("h_separation", 16)
 	big_grid.add_theme_constant_override("v_separation", 16)
@@ -245,6 +273,26 @@ func _build_ui() -> void:
 		new_game_button = _make_button("Nueva partida", COLOR_ACTIVE)
 		new_game_button.pressed.connect(_on_new_game_pressed)
 		buttons.add_child(new_game_button)
+
+	notes_button = _make_button("Apuntes", COLOR_CELL)
+	notes_button.toggle_mode = true
+	notes_button.add_theme_stylebox_override("pressed", _flat(Color("3b6f8f")))
+	notes_button.add_theme_stylebox_override("hover_pressed", _flat(Color("3b6f8f")))
+	notes_button.toggled.connect(_on_notes_toggled)
+	buttons.add_child(notes_button)
+	clear_notes_button = _make_button("Borrar", COLOR_CELL)
+	clear_notes_button.visible = false
+	clear_notes_button.pressed.connect(clear_arrows)
+	buttons.add_child(clear_notes_button)
+
+	notes_layer = ArrowLayer.new()
+	notes_layer.screen = self
+	notes_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	notes_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(notes_layer)
+
+	big_grid.resized.connect(notes_layer.queue_redraw)
+	_build_confirm_dialog()
 
 
 	side_box = VBoxContainer.new()
@@ -281,10 +329,13 @@ func apply_layout(is_wide: bool) -> void:
 	if clock_row != null:
 		clock_row.vertical = wide
 	buttons_row.vertical = wide
+	if notes_layer != null:
+		notes_layer.queue_redraw.call_deferred()
 
 
 func _make_button(text: String, color: Color) -> Button:
 	var button := Button.new()
+	Fx.press_feedback(button)
 	button.text = text
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.custom_minimum_size = Vector2(0, 120)
@@ -343,25 +394,229 @@ func _on_small_pressed(big: int, small: int) -> void:
 		if finished or game.current_player != my_seat or not game.is_legal(big, small):
 			return
 		move_requested.emit(big, small)
-	elif game.play(big, small):
-		_refresh()
+	else:
+		var mover := game.current_player
+		if game.play(big, small):
+			last_move = Vector2i(big, small)
+			last_move_player = mover
+			_refresh()
 
 
 func _on_left_pressed() -> void:
 	if online and not finished:
-		resign_requested.emit()
+		ask_resign()
 	else:
 		exit_requested.emit()
 
 
+## Pide confirmación antes de rendirse (para no perder la partida de un toque).
+func ask_resign() -> void:
+	if confirm_layer == null or finished:
+		return
+	confirm_layer.visible = true
+	Fx.fade_in(confirm_layer, 0.15)
+
+
+func _confirm_resign() -> void:
+	confirm_layer.visible = false
+	resign_requested.emit()
+
+
+func _build_confirm_dialog() -> void:
+	confirm_layer = Control.new()
+	confirm_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	confirm_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	confirm_layer.visible = false
+	add_child(confirm_layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.65)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	confirm_layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	confirm_layer.add_child(center)
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(820, 0)
+	var style := _flat(Color("1f2133"), 24)
+	style.border_color = COLOR_ACTIVE
+	style.set_border_width_all(3)
+	style.set_content_margin_all(48)
+	card.add_theme_stylebox_override("panel", style)
+	center.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 28)
+	card.add_child(box)
+	var title := Label.new()
+	title.text = "¿Seguro que te rendís?"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 56)
+	title.add_theme_color_override("font_color", COLOR_TEXT)
+	box.add_child(title)
+	var note := Label.new()
+	note.text = "Perdés la partida."
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.add_theme_font_size_override("font_size", 38)
+	note.add_theme_color_override("font_color", COLOR_DRAW)
+	box.add_child(note)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	box.add_child(row)
+	var keep := _make_button("Seguir jugando", COLOR_ACTIVE)
+	keep.pressed.connect(func() -> void: confirm_layer.visible = false)
+	row.add_child(keep)
+	var yes := _make_button("Rendirme", Color("8f2f34"))
+	yes.pressed.connect(_confirm_resign)
+	row.add_child(yes)
+
+
 func _on_new_game_pressed() -> void:
 	game.reset()
+	last_move = Vector2i(-1, -1)
+	clear_arrows()
 	_refresh()
+
+
+# --- Última jugada del rival -------------------------------------------------
+
+## Resalta (borde del color de quien jugó + brillo suave) la última jugada a la que hay
+## que responder. En online solo se marca la del rival, no la propia.
+func _apply_highlight() -> void:
+	var target := Vector2i(-1, -1)
+	if last_move.x >= 0 and (not online or last_move_player != my_seat):
+		target = last_move
+	if target == _highlighted:
+		return
+	if _highlight_tween != null:
+		_highlight_tween.kill()
+		_highlight_tween = null
+	if _highlighted.x >= 0:
+		var old: Button = small_buttons[_highlighted.x][_highlighted.y]
+		old.modulate.a = 1.0
+		_style_button(old, COLOR_CELL)
+	_highlighted = target
+	if target.x >= 0:
+		var button: Button = small_buttons[target.x][target.y]
+		var color: Color = colors[last_move_player]
+		var base := COLOR_CELL.lerp(color, 0.28)
+		for state in ["normal", "hover", "pressed", "disabled"]:
+			var style := _flat(base)
+			style.border_color = color
+			style.set_border_width_all(5)
+			button.add_theme_stylebox_override(state, style)
+		_highlight_tween = Fx.glow(button)
+
+
+# --- Apuntes: flechas sobre el tablero -----------------------------------------
+
+func _on_notes_toggled(on: bool) -> void:
+	notes_mode = on
+	clear_notes_button.visible = on
+	_drag_from = Vector2i(-1, -1)
+	notes_layer.queue_redraw()
+	if on:
+		show_notice("Apuntes: arrastrá sobre el tablero para dibujar una flecha", 3000)
+
+
+func clear_arrows() -> void:
+	arrows.clear()
+	notes_layer.queue_redraw()
+
+
+func _input(event: InputEvent) -> void:
+	if not notes_mode or notes_layer == null or confirm_layer.visible:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var in_board := big_grid.get_global_rect().has_point(event.position)
+		if event.pressed:
+			if in_board:
+				_drag_from = _cell_at(event.position)
+				_drag_point = event.position
+				notes_layer.queue_redraw()
+				get_viewport().set_input_as_handled()
+		elif _drag_from.x >= 0:
+			var target := _cell_at(event.position)
+			if target == _drag_from:
+				_delete_arrow_near(event.position)
+			elif in_board:
+				_toggle_arrow(_drag_from, target)
+			_drag_from = Vector2i(-1, -1)
+			notes_layer.queue_redraw()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and _drag_from.x >= 0:
+		_drag_point = event.position
+		notes_layer.queue_redraw()
+		get_viewport().set_input_as_handled()
+
+
+## Dibujar la misma flecha otra vez la borra.
+func _toggle_arrow(from: Vector2i, to: Vector2i) -> void:
+	for i in arrows.size():
+		if arrows[i]["from"] == from and arrows[i]["to"] == to:
+			arrows.remove_at(i)
+			return
+	arrows.append({"from": from, "to": to})
+
+
+## Tocar una flecha la borra.
+func _delete_arrow_near(point: Vector2) -> void:
+	for i in range(arrows.size() - 1, -1, -1):
+		var a := _cell_center(arrows[i]["from"])
+		var b := _cell_center(arrows[i]["to"])
+		var closest := Geometry2D.get_closest_point_to_segment(point, a, b)
+		if closest.distance_to(point) < 34.0:
+			arrows.remove_at(i)
+			return
+
+
+func _cell_center(cell: Vector2i) -> Vector2:
+	var button: Button = small_buttons[cell.x][cell.y]
+	return button.get_global_rect().get_center()
+
+
+func _cell_at(point: Vector2) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_distance := INF
+	for big in 9:
+		for small in 9:
+			var distance := _cell_center(Vector2i(big, small)).distance_squared_to(point)
+			if distance < best_distance:
+				best_distance = distance
+				best = Vector2i(big, small)
+	return best
+
+
+func draw_arrows_on(layer: Control) -> void:
+	var inverse := layer.get_global_transform().affine_inverse()
+	for arrow in arrows:
+		_draw_arrow(layer, inverse * _cell_center(arrow["from"]), inverse * _cell_center(arrow["to"]), ARROW_COLOR)
+	if _drag_from.x >= 0:
+		var preview := ARROW_COLOR
+		preview.a *= 0.6
+		_draw_arrow(layer, inverse * _cell_center(_drag_from), inverse * _drag_point, preview)
+
+
+func _draw_arrow(layer: Control, from: Vector2, to: Vector2, color: Color) -> void:
+	var length := from.distance_to(to)
+	if length < 12.0:
+		return
+	var direction := (to - from) / length
+	var head := minf(46.0, length * 0.6)
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var base := to - direction * head
+	layer.draw_circle(from, 9.0, color)
+	layer.draw_line(from, base + direction * 4.0, color, 14.0, true)
+	layer.draw_colored_polygon(PackedVector2Array([
+		to, base + perpendicular * 26.0, base - perpendicular * 26.0]), color)
 
 
 # --- Refrescar lo que se ve -------------------------------------------------
 
 func _refresh() -> void:
+	if _prev_cells.is_empty():
+		_prev_cells.resize(81)
+		_prev_cells.fill(UltimateGame.NONE)
+		_prev_results.resize(9)
+		_prev_results.fill(UltimateGame.NONE)
 	var legal := {}
 	if not finished:
 		for move in game.legal_moves():
@@ -384,6 +639,8 @@ func _refresh() -> void:
 			var mark := game.get_cell(big, small)
 			var button: Button = small_buttons[big][small]
 			button.text = _mark_text(mark)
+			if mark != UltimateGame.NONE and _prev_cells[big * 9 + small] == UltimateGame.NONE:
+				Fx.pop(button)
 			button.disabled = not (can_play and legal.has(Vector2i(big, small)))
 			button.add_theme_color_override("font_disabled_color", _mark_color(mark))
 
@@ -394,6 +651,13 @@ func _refresh() -> void:
 		var label_color := _mark_color(board_result)
 		label_color.a = 0.3
 		label.add_theme_color_override("font_color", label_color)
+		if decided and _prev_results[big] == UltimateGame.NONE:
+			Fx.fade_in(label, 0.35)
+			Fx.pop(label, 0.4, 0.45)
+
+	_prev_cells.assign(game.cells)
+	_prev_results.assign(game.board_results)
+	_apply_highlight()
 
 	if online:
 		left_button.text = "Volver al menú" if finished else "Rendirse"
@@ -480,3 +744,12 @@ func _style_button(button: Button, color: Color) -> void:
 	button.add_theme_stylebox_override("hover", _flat(color.lightened(0.15)))
 	button.add_theme_stylebox_override("pressed", _flat(color.lightened(0.3)))
 	button.add_theme_stylebox_override("disabled", _flat(color.darkened(0.25)))
+
+
+## Capa transparente encima del tablero donde se dibujan las flechas de apuntes.
+class ArrowLayer extends Control:
+	var screen: Control
+
+	func _draw() -> void:
+		if screen != null:
+			screen.draw_arrows_on(self)

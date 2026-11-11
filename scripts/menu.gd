@@ -8,6 +8,7 @@ signal online_requested(kind: String, code: String)
 signal cancel_requested
 
 const Profile := preload("res://scripts/profile.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 const COLOR_BG := Color("14151f")
 const COLOR_CELL := Color("2d3048")
@@ -224,6 +225,7 @@ func _build_main_page() -> void:
 	cancel_button.visible = false
 	cancel_button.pressed.connect(func() -> void: cancel_requested.emit())
 	root.add_child(cancel_button)
+	Fx.stagger_in.call_deferred(root.get_children())
 
 	# Flecha suave al centro del borde izquierdo: lleva a los colores.
 	var to_colors := Chevron.new(-1)
@@ -574,6 +576,7 @@ func _make_edit(text: String, placeholder: String) -> LineEdit:
 func _make_small_button(text: String) -> Button:
 	var button := Button.new()
 	button.text = text
+	Fx.press_feedback(button)
 	button.custom_minimum_size = Vector2(0, 90)
 	button.add_theme_font_size_override("font_size", 36)
 	button.add_theme_color_override("font_color", COLOR_TEXT)
@@ -584,6 +587,7 @@ func _make_small_button(text: String) -> Button:
 func _make_button(text: String, color: Color) -> Button:
 	var button := Button.new()
 	button.text = text
+	Fx.press_feedback(button)
 	button.custom_minimum_size = Vector2(0, 120)
 	button.add_theme_font_size_override("font_size", 44)
 	button.add_theme_color_override("font_color", COLOR_TEXT)

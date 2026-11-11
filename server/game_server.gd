@@ -29,10 +29,10 @@ const DEFAULT_COLORS := {"x": "#e5484d", "o": "#3b82f6"}
 const MAX_SKIPS := 3
 
 var port := 9080
-var initial_ms := 90000
-var increment_ms := 20000
+var initial_ms := 60000
+var increment_ms := 15000
 ## Banco que se le repone a quien se pasó de tiempo y le saltaron el turno.
-var skip_refill_ms := 45000
+var skip_refill_ms := 30000
 
 var _tcp := TCPServer.new()
 var _conns: Array[Conn] = []
