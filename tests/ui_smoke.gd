@@ -152,6 +152,33 @@ func _run() -> void:
 	check(online2._highlighted == Vector2i(-1, -1), "online: mi propia jugada no se resalta")
 	online2.queue_free()
 
+	# --- Reconexión: se cae el socket en plena partida y se reanuda con el token ---
+	var app2: Control = load("res://scenes/main.tscn").instantiate()
+	root.add_child(app2)
+	await process_frame
+	app2.profile.server_url = "ws://127.0.0.1:1"
+	app2._on_net_message({"t": "start", "you": 2, "token": "tok123", "names": ["Ana", "Beto"],
+		"colors": ["#e5484d", "#3b82f6"], "clocks": [60000, 60000], "rules": 2})
+	await process_frame
+	check(app2.game_screen != null and app2._token == "tok123", "start guarda el token")
+	app2._on_net_disconnected()
+	check(app2._reconnecting and app2.game_screen.status_label.text == "Reconectando...", "si se cae la conexión en plena partida se muestra Reconectando")
+	check(not app2.game_screen.finished, "la partida no se da por terminada mientras se reconecta")
+	app2._on_net_message({"t": "opponent", "connected": false, "grace_ms": 60000})
+	check(app2.game_screen.status_label.text.begins_with("El rival perdió la conexión"), "se avisa si el rival se cayó")
+	app2._on_net_message({"t": "resume_ok", "you": 2, "names": ["Ana", "Beto"], "colors": ["#e5484d", "#3b82f6"],
+		"clocks": [50000, 40000], "skips": [0, 1], "opponent_connected": true,
+		"log": [[4, 2], [2, 5], "s"]})
+	var rg: Control = app2.game_screen
+	check(not app2._reconnecting and not rg.finished, "al reanudar termina la reconexión")
+	check(rg.game.get_cell(4, 2) == UltimateGame.X and rg.game.get_cell(2, 5) == UltimateGame.NONE, "las jugadas se reconstruyen (y el salto deshace la última)")
+	check(rg.game.current_player == UltimateGame.O and rg.skips[2] == 1, "turno y saltos quedan como en el servidor")
+	check(not rg.status_label.text.begins_with("Reconectando") and not rg.status_label.text.begins_with("El rival perdió"), "los avisos desaparecen al reanudar")
+	app2._on_net_disconnected()
+	app2._on_net_message({"t": "resume_failed"})
+	check(rg.finished and rg.status_label.text == "Se cayó la conexión", "si la partida ya no existe, termina")
+	app2.queue_free()
+
 	# --- Juego online (mensajes del servidor simulados) ---
 	var start := {
 		"t": "start", "you": 2, "names": ["Ana", "Beto"],

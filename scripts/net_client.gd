@@ -8,11 +8,14 @@ signal message(data: Dictionary)
 
 ## Cada cuánto se manda un ping para que los proxies no corten la conexión ociosa.
 const PING_INTERVAL_MS := 25000
+## Si en este tiempo no llega nada del servidor (ni el pong del ping), la conexión está muerta.
+const DEAD_MS := 55000
 
 var _ws := WebSocketPeer.new()
 var _active := false
 var _was_open := false
 var _last_ping_ms := 0
+var _last_rx_ms := 0
 
 
 func connect_to_server(url: String) -> int:
@@ -21,6 +24,19 @@ func connect_to_server(url: String) -> int:
 	_active = err == OK
 	_was_open = false
 	return err
+
+
+## true mientras hay un intento de conexión o una conexión en marcha.
+func is_busy() -> bool:
+	return _active
+
+
+## Da la conexión por perdida sin esperar al sistema (por ejemplo, un socket medio muerto).
+func force_drop() -> void:
+	_ws.close()
+	_active = false
+	_was_open = false
+	disconnected.emit()
 
 
 func is_open() -> bool:
@@ -45,14 +61,18 @@ func _process(_delta: float) -> void:
 			if not _was_open:
 				_was_open = true
 				_last_ping_ms = Time.get_ticks_msec()
+				_last_rx_ms = _last_ping_ms
 				connected.emit()
 			if Time.get_ticks_msec() - _last_ping_ms >= PING_INTERVAL_MS:
 				_last_ping_ms = Time.get_ticks_msec()
 				send({"t": "ping"})
 			while _ws.get_available_packet_count() > 0:
+				_last_rx_ms = Time.get_ticks_msec()
 				var data = JSON.parse_string(_ws.get_packet().get_string_from_utf8())
 				if typeof(data) == TYPE_DICTIONARY:
 					message.emit(data)
+			if Time.get_ticks_msec() - _last_rx_ms > DEAD_MS:
+				force_drop()
 		WebSocketPeer.STATE_CLOSED:
 			_active = false
 			_was_open = false

@@ -13,6 +13,12 @@ var current: Control
 var menu: Control
 var game_screen: Control
 var _pending: Dictionary = {}
+## Datos para volver a una partida si se cae la conexión.
+var _token := ""
+var _reconnecting := false
+var _reconnect_started_ms := 0
+var _next_attempt_ms := 0
+var _probe_deadline_ms := 0
 ## true cuando la ventana es más ancha que alta (compu): layout horizontal.
 var wide := false
 
@@ -29,10 +35,18 @@ func _ready() -> void:
 	show_menu()
 
 
+const RECONNECT_WINDOW_MS := 75000  # un poco más que la gracia del servidor (60 s)
+const RETRY_MS := 2000
+const PROBE_MS := 4000
+
+
 ## Botón "atrás" de Android: en el menú cierra la app; en una partida local o
 ## terminada vuelve al menú; en una partida online en curso no hace nada
 ## (para no rendirse sin querer, hay que usar el botón Rendirse).
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		_probe_connection()
+		return
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
 	if game_screen == null:
@@ -46,6 +60,8 @@ func _notification(what: int) -> void:
 
 func show_menu(status: String = "") -> void:
 	game_screen = null
+	_token = ""
+	_reconnecting = false
 	menu = Menu.new()
 	menu.profile = profile
 	menu.local_requested.connect(_on_local_requested)
@@ -117,6 +133,9 @@ func _on_cancel_requested() -> void:
 
 
 func _on_net_connected() -> void:
+	if _reconnecting:
+		net.send({"t": "resume", "token": _token})
+		return
 	if not _pending.is_empty():
 		net.send(_pending)
 		_pending = {}
@@ -124,7 +143,14 @@ func _on_net_connected() -> void:
 
 func _on_net_disconnected() -> void:
 	_pending = {}
-	if game_screen != null:
+	if _reconnecting:
+		return  # un intento falló: _process vuelve a probar
+	if game_screen != null and game_screen.online and not game_screen.finished and not _token.is_empty():
+		_reconnecting = true
+		_reconnect_started_ms = Time.get_ticks_msec()
+		_next_attempt_ms = _reconnect_started_ms + 1000
+		game_screen.set_reconnecting(true)
+	elif game_screen != null:
 		game_screen.on_disconnected()
 	elif menu != null:
 		menu.set_busy(false)
@@ -132,6 +158,7 @@ func _on_net_disconnected() -> void:
 
 
 func _on_net_message(data: Dictionary) -> void:
+	_probe_deadline_ms = 0
 	match str(data.get("t", "")):
 		"waiting":
 			if game_screen == null:
@@ -154,11 +181,23 @@ func _on_net_message(data: Dictionary) -> void:
 			if game_screen != null:
 				game_screen.apply_skip(data)
 		"over":
+			_token = ""
+			_reconnecting = false
 			if game_screen != null:
 				game_screen.apply_over(data)
+		"resume_ok":
+			_reconnecting = false
+			if game_screen != null:
+				game_screen.apply_resume(data)
+		"resume_failed":
+			_give_up_reconnecting()
+		"opponent":
+			if game_screen != null:
+				game_screen.set_opponent_connected(bool(data.get("connected", true)))
 
 
 func _start_online(start: Dictionary) -> void:
+	_token = str(start.get("token", ""))
 	game_screen = GameScreen.new()
 	game_screen.setup_online(start, profile)
 	game_screen.move_requested.connect(func(big: int, small: int) -> void:
@@ -166,3 +205,34 @@ func _start_online(start: Dictionary) -> void:
 	game_screen.resign_requested.connect(func() -> void: net.send({"t": "resign"}))
 	game_screen.exit_requested.connect(show_menu)
 	_show(game_screen)
+
+
+func _process(_delta: float) -> void:
+	var now := Time.get_ticks_msec()
+	if _reconnecting:
+		if now - _reconnect_started_ms > RECONNECT_WINDOW_MS:
+			_give_up_reconnecting()
+		elif not net.is_busy() and not net.is_open() and now >= _next_attempt_ms:
+			_next_attempt_ms = now + RETRY_MS
+			net.connect_to_server(profile.server_url)
+	if _probe_deadline_ms > 0 and now > _probe_deadline_ms:
+		_probe_deadline_ms = 0
+		net.force_drop()  # no contestó: la conexión estaba muerta aunque pareciera abierta
+
+
+## Al volver a la app (o a la pestaña) se comprueba que la conexión siga viva.
+func _probe_connection() -> void:
+	if _reconnecting or game_screen == null or not game_screen.online or game_screen.finished:
+		return
+	if net != null and net.is_open():
+		net.send({"t": "ping"})
+		_probe_deadline_ms = Time.get_ticks_msec() + PROBE_MS
+
+
+func _give_up_reconnecting() -> void:
+	_reconnecting = false
+	_token = ""
+	net.close()
+	if game_screen != null:
+		game_screen.set_reconnecting(false)
+		game_screen.on_disconnected()

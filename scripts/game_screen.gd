@@ -36,6 +36,9 @@ var _clock_received_ms := 0
 var _result_text := ""
 ## Aviso temporal que reemplaza el estado (errores del servidor, reglas distintas).
 var _notice := ""
+const NOTICE_RECONNECTING := "Reconectando..."
+const NOTICE_OPPONENT_GONE := "El rival perdió la conexión. Lo esperamos un rato..."
+var reconnecting := false
 var _notice_until_ms := 0
 
 ## En pantallas anchas (compu) el tablero va a la izquierda y los datos a la derecha.
@@ -172,6 +175,52 @@ func apply_over(data: Dictionary) -> void:
 		_result_text = "Ganaste" + _reason_suffix(reason, true)
 	else:
 		_result_text = "Perdiste" + _reason_suffix(reason, false)
+	_refresh()
+
+
+## Mientras la app intenta volver a la partida se muestra "Reconectando...".
+func set_reconnecting(on: bool) -> void:
+	reconnecting = on
+	if on:
+		_notice = NOTICE_RECONNECTING
+		_notice_until_ms = 1 << 60
+	elif _notice == NOTICE_RECONNECTING:
+		_notice = ""
+	_refresh_status()
+
+
+func set_opponent_connected(connected: bool) -> void:
+	if not connected:
+		_notice = NOTICE_OPPONENT_GONE
+		_notice_until_ms = 1 << 60
+	elif _notice == NOTICE_OPPONENT_GONE:
+		_notice = ""
+	_refresh_status()
+
+
+## Reconstruye la partida a partir de las jugadas guardadas en el servidor.
+func apply_resume(data: Dictionary) -> void:
+	game = UltimateGame.new()
+	last_move = Vector2i(-1, -1)
+	for entry in data.get("log", []):
+		if entry is Array:
+			var mover := game.current_player
+			if game.play(int(entry[0]), int(entry[1])):
+				last_move = Vector2i(int(entry[0]), int(entry[1]))
+				last_move_player = mover
+		else:
+			game.skip_turn()
+			last_move = Vector2i(-1, -1)
+	var counts: Array = data.get("skips", [])
+	if counts.size() == 2:
+		skips = [0, int(counts[0]), int(counts[1])]
+	_set_clocks(data)
+	finished = false
+	disconnected = false
+	_prev_cells.assign(game.cells)
+	_prev_results.assign(game.board_results)
+	set_reconnecting(false)
+	set_opponent_connected(bool(data.get("opponent_connected", true)))
 	_refresh()
 
 

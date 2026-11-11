@@ -85,6 +85,45 @@ func _run() -> void:
 	a.client.send({"t": "resign"})
 	await _next(b, "over")
 
+	# --- Perder la conexión y reanudar con el token ---
+	a.client.send(qa)
+	b.client.send(qb)
+	var ga := await _next(a, "start")
+	var gb := await _next(b, "start")
+	var mover: Probe = a if ga.you == 1 else b
+	var dropper: Probe = b if mover == a else a
+	var dropper_start: Dictionary = gb if dropper == b else ga
+	check(str(dropper_start.get("token", "")).length() > 10, "el start trae un token para reanudar")
+	mover.client.send({"t": "move", "big": 4, "small": 2})
+	await _next(mover, "move")
+	await _next(dropper, "move")
+	dropper.client.close()
+	var gone := await _next(mover, "opponent")
+	check(gone.get("connected") == false, "el rival se entera de que se cayó la conexión")
+	var back := _probe("Beto", "#000000", "#000000")
+	check(await _wait_open(back), "se vuelve a conectar")
+	back.client.send({"t": "resume", "token": dropper_start.get("token", "")})
+	var resumed := await _next(back, "resume_ok")
+	var log: Array = resumed.get("log", [])
+	check(log.size() >= 1 and int(log[0][0]) == 4 and int(log[0][1]) == 2, "reanudar devuelve las jugadas hechas")
+	check(int(resumed.get("you", 0)) == int(dropper_start.get("you", -1)), "vuelve al mismo asiento")
+	check((await _next(mover, "opponent")).get("connected") == true, "el rival se entera de que volvió")
+	var stranger := _probe("Zeta", "#000000", "#000000")
+	check(await _wait_open(stranger), "otro cliente conectado")
+	stranger.client.send({"t": "resume", "token": "inventado"})
+	check(not (await _next(stranger, "resume_failed")).is_empty(), "un token inventado no sirve")
+
+	# Si no vuelve dentro de la gracia, pierde; al volver tarde se entera del resultado.
+	back.client.close()
+	check((await _next(mover, "opponent")).get("connected") == false, "se cae otra vez")
+	var forfeit := await _next(mover, "over", 6.0)
+	check(forfeit.get("reason") == "disconnect", "pasada la gracia gana el que se quedó")
+	check(int(forfeit.get("winner", 0)) == int(ga.you if mover == a else gb.you), "gana el que no se desconectó")
+	var late := _probe("Beto", "#000000", "#000000")
+	check(await _wait_open(late), "vuelve tarde")
+	late.client.send({"t": "resume", "token": dropper_start.get("token", "")})
+	check((await _next(late, "over")).get("reason") == "disconnect", "al volver tarde se entera de cómo terminó")
+
 	if failures == 0:
 		print("OK: test online pasó")
 	else:
