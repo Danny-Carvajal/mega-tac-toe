@@ -712,6 +712,18 @@ func _layout_pages() -> void:
 		var vertical := 40 if wide else 60
 		margin.add_theme_constant_override("margin_top", vertical)
 		margin.add_theme_constant_override("margin_bottom", vertical)
+		if i == 1 and server_button != null and shop_button != null:
+			# Engranaje y Tienda alineados con los bordes de la columna de contenido (en compu no se salen a las zonas de los costados).
+			var edge_gap := float(side) if wide else 24.0
+			var top_gap := float(vertical) if wide else 24.0
+			server_button.offset_right = -edge_gap
+			server_button.offset_left = -edge_gap - 80.0
+			server_button.offset_top = top_gap
+			server_button.offset_bottom = top_gap + 80.0
+			shop_button.offset_left = edge_gap
+			shop_button.offset_right = edge_gap + 276.0
+			shop_button.offset_top = top_gap
+			shop_button.offset_bottom = top_gap + 80.0
 	_layout_edges()
 	if _tween == null or not _tween.is_running():
 		_set_page_f(float(page))
