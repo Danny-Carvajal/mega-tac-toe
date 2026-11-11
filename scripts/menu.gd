@@ -9,6 +9,7 @@ signal cancel_requested
 
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
+const Stats := preload("res://scripts/stats.gd")
 
 const COLOR_BG := Color("14151f")
 const COLOR_CELL := Color("2d3048")
@@ -19,15 +20,22 @@ const COLOR_MUTED := Color("8a8fa8")
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
 const NAV_HEIGHT := 170.0
 ## En pantalla ancha las dos páginas van lado a lado, achicadas para que entren.
-const WIDE_SCALE := 0.66
+const WIDE_SCALE := 0.58
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
+const COLOR_WIN := Color("3ecf8e")
+const COLOR_LOSS := Color("e5484d")
+const COLOR_DRAW := Color("8a8fa8")
+const COLOR_CARD := Color("1f2133")
 
 var profile: Profile
 var color_x: Color
 var color_o: Color
 var selected_mark := "X"
 var colors_open := false
+## Página visible: 0 colores, 1 jugar, 2 estadísticas.
+var page := 1
+var stats: Stats
 var wide := false
 
 var name_edit: LineEdit
@@ -40,19 +48,23 @@ var server_panel: PanelContainer
 var server_button: Button
 var main_page: Control
 var colors_page: Control
+var stats_page: Control
+var stats_donut: DonutChart
 var pager: Control
 var nav: NavBar
 
 var _action_buttons: Array[Button] = []
 var _chevrons: Array[Control] = []
-var _divider: ColorRect
+var _dividers: Array[ColorRect] = []
+var _reset_armed := false
 var _swatch_x: Button
 var _swatch_o: Button
-var _page_offset := 0.0
+var _page_f := 1.0
 var _pressing := false
 var _dragging := false
 var _press_pos := Vector2.ZERO
-var _press_offset := 0.0
+var _press_f := 1.0
+var _press_page := 1
 var _block_taps_until := 0
 var _tween: Tween
 
@@ -60,6 +72,8 @@ var _tween: Tween
 func _ready() -> void:
 	if profile == null:
 		profile = Profile.new()
+	if stats == null:
+		stats = Stats.new()
 	color_x = profile.color_x
 	color_o = profile.color_o
 	_build_ui()
@@ -84,28 +98,35 @@ func handle_back() -> bool:
 	if server_panel.visible:
 		server_panel.visible = false
 		return true
-	if colors_open:
-		set_colors_open(false)
+	if not wide and page != 1:
+		set_page(1)
 		return true
 	return false
 
 
 func set_colors_open(open: bool, animate := true) -> void:
-	colors_open = open
+	set_page(0 if open else 1, animate)
+
+
+## Va a una página (0 colores, 1 jugar, 2 estadísticas).
+func set_page(index: int, animate := true) -> void:
+	page = clampi(index, 0, 2)
+	colors_open = page == 0
 	if wide:
 		return
-	if open:
-		server_panel.visible = false
-		get_viewport().gui_release_focus()
-	var target := pager.size.x if open else 0.0
+	server_panel.visible = false
+	get_viewport().gui_release_focus()
+	if page == 2 and stats_donut != null:
+		stats_donut.play()
+	var target := float(page)
 	if _tween != null:
 		_tween.kill()
 	if animate:
 		_tween = create_tween()
-		_tween.tween_method(_set_offset, _page_offset, target, 0.22) \
+		_tween.tween_method(_set_page_f, _page_f, target, 0.22) \
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	else:
-		_set_offset(target)
+		_set_page_f(target)
 
 
 # ---------------------------------------------------------------- construcción
@@ -129,22 +150,27 @@ func _build_ui() -> void:
 	nav.offset_top = -NAV_HEIGHT
 	nav.tab_pressed.connect(func(index: int) -> void:
 		if _taps_allowed():
-			set_colors_open(index == 0))
+			set_page(index))
 	add_child(nav)
 
-	_divider = ColorRect.new()
-	_divider.color = COLOR_CELL
-	_divider.visible = false
-	_divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_divider)
+	for i in 2:
+		var divider := ColorRect.new()
+		divider.color = COLOR_CELL
+		divider.visible = false
+		divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(divider)
+		_dividers.append(divider)
 
 	main_page = Control.new()
 	pager.add_child(main_page)
 	colors_page = Control.new()
 	pager.add_child(colors_page)
+	stats_page = Control.new()
+	pager.add_child(stats_page)
 
 	_build_main_page()
 	_build_colors_page()
+	_build_stats_page()
 	_build_server_panel()
 	_layout_pages.call_deferred()
 
@@ -234,6 +260,13 @@ func _build_main_page() -> void:
 			set_colors_open(true))
 	main_page.add_child(to_colors)
 	_chevrons.append(to_colors)
+	var to_stats := Chevron.new(1)
+	to_stats.pressed.connect(func() -> void:
+		if _taps_allowed():
+			set_page(2))
+	main_page.add_child(to_stats)
+	_chevrons.append(to_stats)
+	_anchor_chevron(to_stats, true)
 	_anchor_chevron(to_colors, false)
 
 
@@ -311,6 +344,112 @@ func _build_colors_page() -> void:
 	_anchor_chevron(to_main, true)
 
 
+## Página de estadísticas: dona con el porcentaje de victorias, barra, racha y últimas partidas.
+func _build_stats_page() -> void:
+	for child in stats_page.get_children():
+		child.queue_free()
+	_chevrons = _chevrons.filter(func(chevron: Control) -> bool: return is_instance_valid(chevron) and chevron.get_parent() != null and chevron.get_parent() != stats_page)
+	var root := _page_root(stats_page)
+
+	var heading := Label.new()
+	heading.text = "Estadísticas"
+	heading.add_theme_font_size_override("font_size", 64)
+	heading.add_theme_color_override("font_color", COLOR_TEXT)
+	root.add_child(heading)
+	root.add_child(_caption("Tus partidas online"))
+
+	var center := CenterContainer.new()
+	root.add_child(center)
+	stats_donut = DonutChart.new()
+	stats_donut.stats = stats
+	center.add_child(stats_donut)
+
+	var tiles := HBoxContainer.new()
+	tiles.add_theme_constant_override("separation", 20)
+	root.add_child(tiles)
+	tiles.add_child(_stat_tile("Victorias", str(stats.wins), COLOR_WIN))
+	tiles.add_child(_stat_tile("Empates", str(stats.draws), COLOR_DRAW))
+	tiles.add_child(_stat_tile("Derrotas", str(stats.losses), COLOR_LOSS))
+
+	var bar := StackBar.new()
+	bar.stats = stats
+	root.add_child(bar)
+
+	var streaks := HBoxContainer.new()
+	streaks.add_theme_constant_override("separation", 20)
+	root.add_child(streaks)
+	var streak_text := "—"
+	var streak_color := COLOR_MUTED
+	if stats.streak > 0:
+		streak_text = "%d %s" % [stats.streak, "victoria" if stats.streak == 1 else "victorias"]
+		streak_color = COLOR_WIN
+	elif stats.streak < 0:
+		streak_text = "%d %s" % [-stats.streak, "derrota" if stats.streak == -1 else "derrotas"]
+		streak_color = COLOR_LOSS
+	streaks.add_child(_stat_tile("Racha actual", streak_text, streak_color, 44))
+	streaks.add_child(_stat_tile("Mejor racha", str(stats.best_streak) if stats.best_streak > 0 else "—", COLOR_TEXT, 44))
+
+	root.add_child(_caption("Últimas partidas"))
+	var dots := RecentDots.new()
+	dots.stats = stats
+	root.add_child(dots)
+
+	var reset := _make_small_button("Borrar estadísticas")
+	reset.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reset.pressed.connect(func() -> void:
+		if not _taps_allowed():
+			return
+		if not _reset_armed:
+			_reset_armed = true
+			reset.text = "Tocá otra vez para borrar"
+			get_tree().create_timer(3.0).timeout.connect(func() -> void:
+				if is_instance_valid(reset):
+					_reset_armed = false
+					reset.text = "Borrar estadísticas")
+		else:
+			_reset_armed = false
+			stats.reset()
+			stats.save_to_disk()
+			_build_stats_page()
+			stats_donut.play())
+	root.add_child(reset)
+
+	var back := Chevron.new(-1)
+	back.pressed.connect(func() -> void:
+		if _taps_allowed():
+			set_page(1))
+	stats_page.add_child(back)
+	_chevrons.append(back)
+	_anchor_chevron(back, false)
+	back.visible = not wide
+
+
+func _stat_tile(label_text: String, value_text: String, color: Color, value_size := 72) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = COLOR_CARD
+	style.set_corner_radius_all(18)
+	style.set_content_margin_all(22)
+	card.add_theme_stylebox_override("panel", style)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	card.add_child(box)
+	var value := Label.new()
+	value.text = value_text
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.add_theme_font_size_override("font_size", value_size)
+	value.add_theme_color_override("font_color", color)
+	box.add_child(value)
+	var caption := Label.new()
+	caption.text = label_text
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 32)
+	caption.add_theme_color_override("font_color", COLOR_MUTED)
+	box.add_child(caption)
+	return card
+
+
 func _build_server_panel() -> void:
 	server_panel = PanelContainer.new()
 	server_panel.visible = false
@@ -382,7 +521,10 @@ func apply_layout(is_wide: bool) -> void:
 		return
 	pager.offset_bottom = 0.0 if wide else -NAV_HEIGHT
 	nav.visible = not wide
-	_divider.visible = wide
+	for divider in _dividers:
+		divider.visible = wide
+	if wide and stats_donut != null:
+		stats_donut.play()
 	for chevron in _chevrons:
 		chevron.visible = not wide
 	server_panel.visible = false
@@ -390,36 +532,39 @@ func apply_layout(is_wide: bool) -> void:
 
 
 func _layout_pages() -> void:
+	var pages := [colors_page, main_page, stats_page]
 	if wide:
 		if _tween != null:
 			_tween.kill()
-		var half := Vector2(pager.size.x / 2.0, pager.size.y)
-		for page in [main_page, colors_page]:
-			page.scale = Vector2(WIDE_SCALE, WIDE_SCALE)
-			page.size = half / WIDE_SCALE
-		main_page.position = Vector2.ZERO
-		colors_page.position = Vector2(half.x, 0.0)
-		_divider.position = Vector2(half.x - 1.5, 80.0)
-		_divider.size = Vector2(3.0, pager.size.y - 160.0)
+		var third := Vector2(pager.size.x / 3.0, pager.size.y)
+		for i in 3:
+			var wide_page: Control = pages[i]
+			wide_page.scale = Vector2(WIDE_SCALE, WIDE_SCALE)
+			wide_page.size = third / WIDE_SCALE
+			wide_page.position = Vector2(third.x * i, 0.0)
+		for i in 2:
+			_dividers[i].position = Vector2(third.x * (i + 1) - 1.5, 80.0)
+			_dividers[i].size = Vector2(3.0, pager.size.y - 160.0)
 		return
-	main_page.scale = Vector2.ONE
-	colors_page.scale = Vector2.ONE
-	main_page.size = pager.size
-	colors_page.size = pager.size
+	for page_control in pages:
+		page_control.scale = Vector2.ONE
+		page_control.size = pager.size
 	if _tween == null or not _tween.is_running():
-		_set_offset(pager.size.x if colors_open else 0.0)
+		_set_page_f(float(page))
 	else:
-		_set_offset(_page_offset)
+		_set_page_f(_page_f)
 
 
-func _set_offset(offset: float) -> void:
+func _set_page_f(f: float) -> void:
 	if wide:
 		return
-	_page_offset = clampf(offset, 0.0, pager.size.x)
-	main_page.position.x = _page_offset
-	colors_page.position.x = _page_offset - pager.size.x
+	_page_f = clampf(f, 0.0, 2.0)
+	var width := pager.size.x
+	colors_page.position.x = (0.0 - _page_f) * width
+	main_page.position.x = (1.0 - _page_f) * width
+	stats_page.position.x = (2.0 - _page_f) * width
 	if nav != null:
-		nav.set_progress(1.0 - _page_offset / maxf(pager.size.x, 1.0))
+		nav.set_progress(_page_f)
 
 
 func _input(event: InputEvent) -> void:
@@ -430,7 +575,8 @@ func _input(event: InputEvent) -> void:
 			_pressing = _swipe_allowed(event.position)
 			_dragging = false
 			_press_pos = event.position
-			_press_offset = _page_offset
+			_press_f = _page_f
+			_press_page = page
 		else:
 			if _dragging:
 				_finish_drag()
@@ -445,7 +591,7 @@ func _input(event: InputEvent) -> void:
 				_tween.kill()
 			get_viewport().gui_release_focus()
 		if _dragging:
-			_set_offset(_press_offset + delta.x)
+			_set_page_f(_press_f - delta.x / maxf(pager.size.x, 1.0))
 			get_viewport().set_input_as_handled()
 
 
@@ -455,17 +601,17 @@ func _swipe_allowed(point: Vector2) -> bool:
 	if server_panel.visible and server_panel.get_global_rect().has_point(point):
 		return false
 	# En la página de colores, arrastrar sobre el selector es para elegir color, no para pasar de página.
-	if colors_open and picker.get_global_rect().has_point(point):
+	if page == 0 and picker.get_global_rect().has_point(point):
 		return false
 	return true
 
 
 func _finish_drag() -> void:
-	var width := pager.size.x
-	if _press_offset < width * 0.5:
-		set_colors_open(_page_offset > width * SWIPE_OPEN_FRACTION)
-	else:
-		set_colors_open(_page_offset > width * (1.0 - SWIPE_OPEN_FRACTION))
+	var moved := _page_f - _press_f
+	var target := _press_page
+	if absf(moved) > SWIPE_OPEN_FRACTION:
+		target = clampi(_press_page + (1 if moved > 0.0 else -1), 0, 2)
+	set_page(target)
 
 
 func _taps_allowed() -> bool:
@@ -638,7 +784,7 @@ class Chevron extends Button:
 class NavBar extends Control:
 	signal tab_pressed(index: int)
 
-	const LABELS := ["Colores", "Jugar"]
+	const LABELS := ["Colores", "Jugar", "Estadísticas"]
 	const BAR := Color("181a29")
 	const PILL := Color("34406b")
 	const ACCENT := Color("8f95ad")
@@ -684,6 +830,13 @@ class NavBar extends Control:
 			if i == 0:
 				draw_circle(center + Vector2(-17, 0) * scale, 27.0 * scale, Color(colors[0], alpha))
 				draw_circle(center + Vector2(17, 0) * scale, 27.0 * scale, Color(colors[1], alpha))
+			elif i == 2:
+				# Barritas de gráfico.
+				var bar := Color(0.91, 0.92, 0.96, alpha)
+				for k in 3:
+					var bar_height: float = [26.0, 46.0, 36.0][k] * scale
+					var bar_x := center.x + (k - 1) * 22.0 * scale
+					draw_line(Vector2(bar_x, center.y + 28.0 * scale), Vector2(bar_x, center.y + 28.0 * scale - bar_height), bar, 14.0 * scale)
 			else:
 				var half := 30.0 * scale
 				var third := half * 2.0 / 3.0
@@ -696,3 +849,111 @@ class NavBar extends Control:
 				var text_size := font.get_string_size(LABELS[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 34)
 				draw_string(font, Vector2(center.x - text_size.x / 2.0, size.y - 26.0), LABELS[i],
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1, 1, 1, w))
+
+
+## Dona con el porcentaje de victorias (verde = victorias, gris = empates, rojo = derrotas).
+class DonutChart extends Control:
+	const WIN := Color("3ecf8e")
+	const LOSS := Color("e5484d")
+	const DRAW := Color("8a8fa8")
+
+	var stats
+	var sweep := 1.0:
+		set(value):
+			sweep = value
+			queue_redraw()
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(620, 620)
+
+	## Anima el barrido de la dona de cero a su valor.
+	func play() -> void:
+		sweep = 0.0
+		var tween := create_tween()
+		tween.tween_property(self, "sweep", 1.0, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	func _draw() -> void:
+		var center := size / 2.0
+		var radius := 250.0
+		var width := 64.0
+		draw_arc(center, radius, 0.0, TAU, 96, Color("22253a"), width, true)
+		var total: int = stats.total()
+		var font := ThemeDB.fallback_font
+		if total == 0:
+			_text(font, "—", center + Vector2(0, 30), 140, Color("8a8fa8"))
+			_text(font, "Sin partidas todavía", center + Vector2(0, 100), 36, Color("8a8fa8"))
+			return
+		var parts := [[stats.wins, WIN], [stats.draws, DRAW], [stats.losses, LOSS]]
+		var visible_parts := 0
+		for part in parts:
+			if part[0] > 0:
+				visible_parts += 1
+		var gap := 0.06 if visible_parts > 1 else 0.0
+		var start := -PI / 2.0
+		for part in parts:
+			if part[0] <= 0:
+				continue
+			var span: float = TAU * float(part[0]) / total * sweep
+			var a0 := start + gap / 2.0
+			var a1 := start + span - gap / 2.0
+			if a1 > a0:
+				draw_arc(center, radius, a0, a1, maxi(8, int(span * 30.0)), part[1], width, true)
+			start += span
+		var shown := int(round(stats.win_rate() * sweep))
+		_text(font, "%d%%" % shown, center + Vector2(0, 30), 150, Color("e8eaf6"))
+		_text(font, "de victorias", center + Vector2(0, 100), 40, Color("8a8fa8"))
+
+	func _text(font: Font, text: String, anchor: Vector2, font_size: int, color: Color) -> void:
+		var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		draw_string(font, Vector2(anchor.x - text_width / 2.0, anchor.y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+
+## Barra apilada: la misma proporción que la dona, de un vistazo.
+class StackBar extends Control:
+	var stats
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(0, 44)
+
+	func _draw() -> void:
+		var back := StyleBoxFlat.new()
+		back.bg_color = Color("22253a")
+		back.set_corner_radius_all(14)
+		draw_style_box(back, Rect2(Vector2.ZERO, size))
+		var total: int = stats.total()
+		if total == 0:
+			return
+		var parts := [[stats.wins, Color("3ecf8e")], [stats.draws, Color("8a8fa8")], [stats.losses, Color("e5484d")]]
+		var x := 0.0
+		for part in parts:
+			if part[0] <= 0:
+				continue
+			var segment_width: float = size.x * float(part[0]) / total
+			var segment := StyleBoxFlat.new()
+			segment.bg_color = part[1]
+			segment.set_corner_radius_all(14)
+			draw_style_box(segment, Rect2(x + 2.0, 2.0, maxf(segment_width - 4.0, 8.0), size.y - 4.0))
+			x += segment_width
+
+
+## Puntos con los últimos resultados (el más reciente a la derecha).
+class RecentDots extends Control:
+	var stats
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(0, 64)
+
+	func _draw() -> void:
+		var recent: Array = stats.recent
+		if recent.is_empty():
+			var font := ThemeDB.fallback_font
+			draw_string(font, Vector2(0, 40), "Todavía no jugaste partidas online", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color("8a8fa8"))
+			return
+		var step := 52.0
+		var count := mini(recent.size(), int(size.x / step))
+		var first := recent.size() - count
+		var offset := size.x - count * step
+		for i in count:
+			var result: String = recent[first + i]
+			var color := Color("3ecf8e") if result == "W" else (Color("e5484d") if result == "L" else Color("8a8fa8"))
+			draw_circle(Vector2(offset + i * step + step / 2.0, size.y / 2.0), 20.0, color)

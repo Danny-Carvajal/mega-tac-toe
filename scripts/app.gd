@@ -6,8 +6,10 @@ const GameScreen := preload("res://scripts/game_screen.gd")
 const NetClient := preload("res://scripts/net_client.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
+const Stats := preload("res://scripts/stats.gd")
 
 var profile := Profile.new()
+var stats := Stats.new()
 var net: Node
 var current: Control
 var menu: Control
@@ -27,6 +29,7 @@ func _ready() -> void:
 	get_window().size_changed.connect(_update_layout)
 	_update_layout()
 	profile.load_from_disk()
+	stats.load_from_disk()
 	net = NetClient.new()
 	add_child(net)
 	net.connected.connect(_on_net_connected)
@@ -64,6 +67,7 @@ func show_menu(status: String = "") -> void:
 	_reconnecting = false
 	menu = Menu.new()
 	menu.profile = profile
+	menu.stats = stats
 	menu.local_requested.connect(_on_local_requested)
 	menu.online_requested.connect(_on_online_requested)
 	menu.cancel_requested.connect(_on_cancel_requested)
@@ -184,6 +188,7 @@ func _on_net_message(data: Dictionary) -> void:
 			_token = ""
 			_reconnecting = false
 			if game_screen != null:
+				_record_result(data)
 				game_screen.apply_over(data)
 		"resume_ok":
 			_reconnecting = false
@@ -236,3 +241,13 @@ func _give_up_reconnecting() -> void:
 	if game_screen != null:
 		game_screen.set_reconnecting(false)
 		game_screen.on_disconnected()
+
+
+## Anota el resultado de la partida online en las estadísticas (una sola vez por partida).
+func _record_result(data: Dictionary) -> void:
+	if game_screen.finished:
+		return
+	var winner := int(data.get("winner", 0))
+	var result := "D" if winner == 0 else ("W" if winner == game_screen.my_seat else "L")
+	stats.record(result)
+	stats.save_to_disk()

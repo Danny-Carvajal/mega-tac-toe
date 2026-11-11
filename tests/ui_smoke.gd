@@ -50,11 +50,25 @@ func _run() -> void:
 	check(not app.menu.colors_open, "swipe a la izquierda vuelve")
 	app.menu.color_o = Profile.DEFAULT_O
 
+	# Estadísticas: nav, registro de resultados
+	app.menu.apply_layout(false)
+	app.menu.set_page(2, false)
+	await process_frame
+	check(app.menu.page == 2 and app.menu.stats_page.position.x == 0.0, "la pestaña de estadísticas abre la página 2")
+	app.menu.set_page(1, false)
+	app.stats.reset()
+	app.stats.record("W")
+	app.stats.record("W")
+	app.stats.record("L")
+	check(app.stats.total() == 3 and app.stats.streak == -1 and app.stats.best_streak == 2, "stats cuenta victorias, derrotas y rachas")
+	check(is_equal_approx(app.stats.win_rate(), 66.6666667) or int(round(app.stats.win_rate())) == 67, "stats calcula el porcentaje")
+	app.stats.reset()
+
 	# Layout ancho (compu): las dos páginas lado a lado, sin barra de abajo
 	app.menu.apply_layout(true)
 	await process_frame
 	check(not app.menu.nav.visible, "en compu no hay barra de pestañas")
-	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x > 0.0, "en compu menú y colores van lado a lado")
+	check(app.menu.colors_page.position.x == 0.0 and app.menu.main_page.position.x > 0.0 and app.menu.stats_page.position.x > app.menu.main_page.position.x, "en compu colores, menú y estadísticas van lado a lado")
 	check(app.menu.colors_page.position.x + app.menu.colors_page.size.x * app.menu.colors_page.scale.x <= app.menu.pager.size.x + 1.0, "la página de colores cabe en pantalla")
 	app.menu.apply_layout(false)
 	await process_frame
