@@ -1032,7 +1032,7 @@ class EdgeZone extends Control:
 	var label := ""
 	var hover_t := 0.0
 	var hovering := false
-	const DWELL := 0.45
+	const DWELL := 0.2
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1063,9 +1063,9 @@ class EdgeZone extends Control:
 
 	func _draw() -> void:
 		var f := clampf(hover_t / DWELL, 0.0, 1.0)
-		var edge_alpha := 0.10 + 0.30 * f
-		var outer := Color(0.9, 0.92, 1.0, edge_alpha)
-		var inner := Color(0.9, 0.92, 1.0, 0.0)
+		var edge_alpha := 0.35 + 0.35 * f
+		var outer := Color(0.0, 0.0, 0.0, edge_alpha)
+		var inner := Color(0.0, 0.0, 0.0, 0.0)
 		var left_colors := PackedColorArray([outer, inner, inner, outer])
 		var points := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
 		if dir > 0:
