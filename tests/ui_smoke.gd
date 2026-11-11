@@ -99,6 +99,12 @@ func _run() -> void:
 	online.setup_online(start, Profile.new())
 	root.add_child(online)
 	await process_frame
+	# Servidor viejo (sin "rules") y errores del servidor: se avisa en pantalla
+	check(online.status_label.text.begins_with("El servidor tiene otras reglas"), "un servidor con reglas viejas se avisa")
+	online.show_notice("Jugada ilegal", 100000)
+	check(online.status_label.text == "Jugada ilegal", "los errores del servidor se muestran")
+	online._notice = ""
+	online._refresh_status()
 	var sent: Array = []
 	online.move_requested.connect(func(big: int, small: int) -> void: sent.append([big, small]))
 	check(online.colors[1] != online.colors[2], "colores iguales: el rival se ve con otro color")

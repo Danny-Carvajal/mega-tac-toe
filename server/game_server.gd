@@ -222,6 +222,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 			"initial_ms": initial_ms,
 			"increment_ms": increment_ms,
 			"max_skips": MAX_SKIPS,
+			"rules": UltimateGame.RULES_VERSION,
 			"clocks": session.clock.snapshot(now),
 		})
 

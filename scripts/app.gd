@@ -120,6 +120,8 @@ func _on_net_message(data: Dictionary) -> void:
 			if game_screen == null:
 				menu.set_busy(false)
 				menu.set_status(str(data.get("msg", "Error")))
+			else:
+				game_screen.show_notice(str(data.get("msg", "Error")))
 		"start":
 			_start_online(data)
 		"move":

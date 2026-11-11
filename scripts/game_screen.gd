@@ -30,6 +30,9 @@ var skips: Array = [0, 0, 0]
 var max_skips := 3
 var _clock_received_ms := 0
 var _result_text := ""
+## Aviso temporal que reemplaza el estado (errores del servidor, reglas distintas).
+var _notice := ""
+var _notice_until_ms := 0
 
 var status_label: Label
 var clock_labels: Array = [null, null, null]
@@ -62,6 +65,10 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 		colors[2] = Color.html(str(server_colors[1]))
 	_resolve_color_clash()
 	max_skips = int(start.get("max_skips", 3))
+	# Un servidor viejo no manda "rules": cuenta como versión 1.
+	if int(start.get("rules", 1)) != UltimateGame.RULES_VERSION:
+		_notice = "El servidor tiene otras reglas (todavía no se actualizó). Algunas jugadas no van a pasar."
+		_notice_until_ms = 1 << 60
 	var clocks: Array = start.get("clocks", [0, 0])
 	clocks_ms = [0, int(clocks[0]), int(clocks[1])]
 	_clock_received_ms = Time.get_ticks_msec()
@@ -75,6 +82,16 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if online:
 		_refresh_clocks()
+	if not _notice.is_empty() and Time.get_ticks_msec() > _notice_until_ms:
+		_notice = ""
+		_refresh_status()
+
+
+## Muestra un aviso en lugar del estado (por ejemplo, un error del servidor).
+func show_notice(text: String, duration_ms := 3500) -> void:
+	_notice = text
+	_notice_until_ms = Time.get_ticks_msec() + duration_ms
+	_refresh_status()
 
 
 # --- Eventos del servidor ---------------------------------------------------
@@ -335,6 +352,10 @@ func _refresh() -> void:
 
 
 func _refresh_status() -> void:
+	if not _notice.is_empty() and not finished:
+		status_label.text = _notice
+		status_label.add_theme_color_override("font_color", Color("ffd24d"))
+		return
 	if finished and online:
 		status_label.text = _result_text
 		status_label.add_theme_color_override("font_color", COLOR_TEXT)

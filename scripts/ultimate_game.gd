@@ -17,6 +17,10 @@ const X := 1
 const O := 2
 const DRAW := 3
 
+## Versión de las reglas. Cliente y servidor tienen que coincidir (1 = tablero ganado se bloquea,
+## 2 = tablero ganado sigue jugable). Subirla cada vez que cambie la lógica.
+const RULES_VERSION := 2
+
 const LINES := [
 	[0, 1, 2], [3, 4, 5], [6, 7, 8],
 	[0, 3, 6], [1, 4, 7], [2, 5, 8],
