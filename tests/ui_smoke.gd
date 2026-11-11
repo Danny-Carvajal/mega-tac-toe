@@ -72,6 +72,7 @@ func _run() -> void:
 	check(online.game.current_player == 1, "tras mi jugada le toca a Ana")
 	online.apply_skip({"player": 1, "skips": [1, 0], "clocks": [10000, 35000]})
 	check(online.game.current_player == 2, "si le saltan el turno a Ana, me toca a mí")
+	check(online.small_buttons[4][0].text == "", "mi última jugada se deshace para volver a elegirla")
 	check(online.clock_labels[1].text.contains("Saltos 1/3"), "se muestra el contador de saltos")
 	online.apply_over({"winner": 2, "reason": "skips", "clocks": [1000, 20000]})
 	check(online.status_label.text.begins_with("Ganaste"), "mensaje de victoria")

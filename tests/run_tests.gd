@@ -127,12 +127,36 @@ func test_skip_turn() -> void:
 	var g := UltimateGame.new()
 	g.play(4, 2)  # X manda a O al tablero 2
 	check(g.skip_turn(), "se puede saltar el turno")
-	check(g.current_player == UltimateGame.X, "tras saltar a O, le toca a X")
-	check(g.forced_board == 2, "el tablero forzado se mantiene al saltar")
-	check(g.cells.count(UltimateGame.NONE) == 80, "saltar no pone marcas")
-	g.board_results[0] = UltimateGame.X
-	g.result = UltimateGame.X
-	check(not g.skip_turn(), "no se puede saltar con la partida terminada")
+	check(g.current_player == UltimateGame.X, "tras saltar a O, X vuelve a jugar")
+	check(g.get_cell(4, 2) == UltimateGame.NONE, "la jugada anterior de X se deshace")
+	check(g.forced_board == -1, "X recupera la elección que tenía en ese turno")
+	check(g.play(4, 6) and g.forced_board == 6, "X puede elegir otra jugada")
+
+	var h := UltimateGame.new()
+	check(h.skip_turn() and h.current_player == UltimateGame.O, "sin jugadas que deshacer solo pasa el turno")
+	check(h.cells.count(UltimateGame.NONE) == 81, "saltar no pone marcas")
+
+	var w := UltimateGame.new()
+	w.cells[0] = UltimateGame.X
+	w.cells[1] = UltimateGame.X
+	w.play(0, 2)
+	check(w.board_results[0] == UltimateGame.X, "X gana el tablero 0")
+	w.skip_turn()
+	check(w.board_results[0] == UltimateGame.NONE, "al deshacer se pierde también ese tablero ganado")
+	check(w.current_player == UltimateGame.X, "X puede volver a jugar ahí")
+
+	var s := UltimateGame.new()
+	s.play(0, 0)
+	s.play(0, 1)
+	s.skip_turn()  # le saltan a X: O deshace su jugada
+	check(s.current_player == UltimateGame.O and s.forced_board == 0, "O vuelve a su turno con el tablero que tenía")
+	s.skip_turn()  # le saltan a O: X deshace la suya
+	check(s.current_player == UltimateGame.X and s.forced_board == -1, "X vuelve a su turno original")
+
+	var done := UltimateGame.new()
+	done.board_results[0] = UltimateGame.X
+	done.result = UltimateGame.X
+	check(not done.skip_turn(), "no se puede saltar con la partida terminada")
 
 
 func test_clock_skip_refill() -> void:

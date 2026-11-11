@@ -14,7 +14,8 @@ extends Node
 ##   {t:"waiting"}, {t:"room", code}
 ##   {t:"start", you, names, colors, initial_ms, increment_ms, clocks}
 ##   {t:"move", big, small, player, clocks}
-##   {t:"skip", player, skips:[x,o], clocks}   se le acabó el tiempo: le saltan el turno
+##   {t:"skip", player, skips:[x,o], clocks}   se le acabó el tiempo: le saltan el turno y
+##       el rival deshace su última jugada y la vuelve a elegir (UltimateGame.skip_turn)
 ##   {t:"over", winner (0 = empate), reason, clocks}
 ##       reason: line | draw | skips (3 saltos) | resign | disconnect
 ##   {t:"error", msg}
