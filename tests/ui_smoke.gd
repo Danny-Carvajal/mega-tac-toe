@@ -293,6 +293,15 @@ func _run() -> void:
 	check(not online.confirm_layer.visible, "al terminar se cierra la confirmación de rendirse")
 	online._on_small_pressed(0, 0)
 	check(online.game.get_cell(0, 0) == 0, "con la partida terminada tocar el tablero no hace nada")
+	online.notes_button.button_pressed = true
+	var arrows_before: int = online.arrows.size()
+	var ev_down := InputEventMouseButton.new()
+	ev_down.button_index = MOUSE_BUTTON_LEFT
+	ev_down.pressed = true
+	ev_down.position = online.big_grid.get_global_rect().get_center()
+	online._input(ev_down)
+	check(online._drag_from.x < 0, "con el cartel de fin puesto, los apuntes no capturan el mouse")
+	online.notes_button.button_pressed = false
 	online._dismiss_result_overlay()
 	check(not online.result_layer.visible and not online.notes_button.disabled, "Ver tablero cierra el cartel y los apuntes andan normal")
 	check(online.left_button.text == "Volver al menú", "al terminar se puede volver al menú")

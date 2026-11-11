@@ -731,7 +731,7 @@ func clear_arrows() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not notes_mode or notes_layer == null or confirm_layer.visible:
+	if not notes_mode or notes_layer == null or confirm_layer.visible or result_layer.visible:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var in_board := big_grid.get_global_rect().has_point(event.position)
