@@ -1,7 +1,7 @@
 name: Web
 
 # Exporta el juego a HTML5 y lo publica en GitHub Pages (gratis en repos públicos):
-# https://danny-carvajal.github.io/mega-tac-toe/
+# https://danny-carvajal.github.io/mega-tac-toe/  (la página se actualiza en cada push)
 # Requiere activar una sola vez: Settings > Pages > Source: "GitHub Actions".
 on:
   push:
