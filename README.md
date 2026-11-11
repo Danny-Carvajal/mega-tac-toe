@@ -53,9 +53,21 @@ sin tráfico y tarda cerca de 1 min en despertar.
 2. Cuando termine, copiar la URL (`https://mega-tic-toe-server.onrender.com`).
 3. En el menú del juego, en "Servidor", poner `wss://mega-tic-toe-server.onrender.com`.
 
+## Android
+
+Cada push a `main` que toque el juego compila un APK en GitHub Actions y lo publica en
+[Releases](https://github.com/Danny-Carvajal/mega-tic-toe/releases/tag/latest) (etiqueta `latest`).
+
+1. Abrir ese link desde el cel y bajar `mega-tic-toe.apk`.
+2. Abrirlo y permitir "instalar apps de orígenes desconocidos" cuando lo pida.
+3. Para jugar online, poner la dirección del servidor en el campo "Servidor" del menú.
+
+El APK está firmado con una llave de debug (`ci/debug.keystore`, pública a propósito), así que las
+builds nuevas se instalan encima de las anteriores. Para publicar en Play Store hará falta una llave propia.
+
 ## Pendiente
 
-- Exportar a Android y web.
+- Exportar a web.
 - Partidas de 24 h por turno (asíncronas), que necesitan guardar partidas en disco/base de datos.
 - Reconexión si se cae la conexión a mitad de partida.
 - Cuentas, ranking y notificaciones.
