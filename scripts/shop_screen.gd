@@ -177,6 +177,7 @@ func _ready() -> void:
 	grid.add_theme_constant_override("h_separation", 18)
 	grid.add_theme_constant_override("v_separation", 18)
 	_scroll.add_child(grid)
+	_scroll.resized.connect(_fit_columns)
 
 	overlay = Control.new()
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -215,9 +216,20 @@ func apply_layout(is_wide: bool) -> void:
 	_margin.add_theme_constant_override("margin_right", side)
 	_margin.add_theme_constant_override("margin_top", 50 if wide else 60)
 	_margin.add_theme_constant_override("margin_bottom", 40)
-	grid.columns = 4 if wide else 3
+	_fit_columns()
 	if collection != null:
 		_refresh()
+
+
+## Cuántas columnas entran en el ancho que hay (así nada se desacomoda en pantallas más angostas).
+func _fit_columns() -> void:
+	if grid == null or _scroll == null:
+		return
+	var available := _scroll.size.x - 24.0
+	if available <= 0.0:
+		grid.columns = 4 if wide else 3
+		return
+	grid.columns = clampi(int((available + 18.0) / (190.0 + 18.0)), 2, 5)
 
 
 func _select_tab(kind: String) -> void:
@@ -258,7 +270,7 @@ func _tile(entry: Dictionary) -> Button:
 	var equipped: bool = collection.equipped.get(entry["kind"], "") == id
 	var rarity_color: Color = Cosmetics.RARITY_COLORS[entry["rarity"]]
 	var tile := Button.new()
-	tile.custom_minimum_size = Vector2(230, 300)
+	tile.custom_minimum_size = Vector2(190, 290)
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tile.focus_mode = Control.FOCUS_NONE
 	for state in ["normal", "hover", "pressed", "disabled"]:
@@ -299,6 +311,7 @@ func _tile(entry: Dictionary) -> Button:
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.add_theme_font_size_override("font_size", 32)
 	name_label.add_theme_color_override("font_color", Pal.text if owned else Pal.muted)
+	name_label.clip_text = true
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(name_label)
 	var state_label := Label.new()
@@ -306,10 +319,11 @@ func _tile(entry: Dictionary) -> Button:
 		state_label.text = "EQUIPADA"
 		state_label.add_theme_color_override("font_color", Pal.accent)
 	else:
-		state_label.text = Cosmetics.RARITY_NAMES[entry["rarity"]] + ("" if owned else " · bloqueada")
+		state_label.text = Cosmetics.RARITY_NAMES[entry["rarity"]] if owned else "Bloqueada"
 		state_label.add_theme_color_override("font_color", rarity_color if owned else Pal.muted)
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	state_label.add_theme_font_size_override("font_size", 26)
+	state_label.clip_text = true
 	state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(state_label)
 	return tile
