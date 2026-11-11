@@ -124,6 +124,38 @@ func _run() -> void:
 	late.client.send({"t": "resume", "token": dropper_start.get("token", "")})
 	check((await _next(late, "over")).get("reason") == "disconnect", "al volver tarde se entera de cómo terminó")
 
+	# El servidor se reinició y perdió la partida: los dos jugadores se la devuelven
+	var ra := _probe("Ana", "#ff0000", "#00ff00")
+	var rb := _probe("Beto", "#0000ff", "#ffff00")
+	check(await _wait_open(ra) and await _wait_open(rb), "restore: los dos conectan")
+	var base := {"t": "restore", "sid": "abc123", "names": ["Ana", "Beto"], "colors": ["#ff0000", "#0000ff"],
+		"log": [[4, 4]], "skips": [0, 0], "clocks": [1500, 1800]}
+	var bad := base.duplicate()
+	bad["log"] = [[4, 4], [4, 4]]
+	bad["seat"] = 1
+	bad["token"] = "tokX"
+	ra.client.send(bad)
+	check(not (await _next(ra, "resume_failed")).is_empty(), "restore: un registro ilegal se rechaza")
+	var ma := base.duplicate()
+	ma["seat"] = 1
+	ma["token"] = "tokA"
+	ra.client.send(ma)
+	check(not (await _next(ra, "restore_wait")).is_empty(), "restore: el primero espera al rival")
+	var mb := base.duplicate()
+	mb["seat"] = 2
+	mb["token"] = "tokB"
+	mb["log"] = [[4, 4]]
+	rb.client.send(mb)
+	var rok_b := await _next(rb, "resume_ok")
+	var rok_a := await _next(ra, "resume_ok")
+	check(int(rok_a.get("you", 0)) == 1 and int(rok_b.get("you", 0)) == 2 and Array(rok_a.get("log", [])).size() == 1, "restore: la partida vuelve con su registro")
+	rb.client.send({"t": "move", "big": 4, "small": 0})
+	check(not (await _next(ra, "move")).is_empty(), "restore: se puede seguir jugando (turno de O)")
+	var token_back := _probe("Ana", "#000000", "#000000")
+	check(await _wait_open(token_back), "restore: reconecta con el token nuevo")
+	token_back.client.send({"t": "resume", "token": "tokA"})
+	check(not (await _next(token_back, "resume_ok")).is_empty(), "restore: el token de antes sigue sirviendo")
+
 	if failures == 0:
 		print("OK: test online pasó")
 	else:

@@ -18,6 +18,7 @@ var game_screen: Control
 var _pending: Dictionary = {}
 ## Datos para volver a una partida si se cae la conexión.
 var _token := ""
+var _restore_sent := false
 var _reconnecting := false
 var _reconnect_started_ms := 0
 var _next_attempt_ms := 0
@@ -144,6 +145,7 @@ func _on_cancel_requested() -> void:
 
 func _on_net_connected() -> void:
 	if _reconnecting:
+		_restore_sent = false
 		net.send({"t": "resume", "token": _token})
 		return
 	if not _pending.is_empty():
@@ -201,7 +203,15 @@ func _on_net_message(data: Dictionary) -> void:
 			if game_screen != null:
 				game_screen.apply_resume(data)
 		"resume_failed":
-			_give_up_reconnecting()
+			# El servidor perdió la partida (se reinició): se la devolvemos con lo que sabe este cliente.
+			if not _restore_sent and game_screen != null and game_screen.online and not game_screen.finished \
+					and not _token.is_empty() and not game_screen.session_id.is_empty():
+				_restore_sent = true
+				net.send(game_screen.restore_payload(_token))
+			else:
+				_give_up_reconnecting()
+		"restore_wait":
+			pass  # falta que vuelva el rival; seguimos en "Reconectando..."
 		"opponent":
 			if game_screen != null:
 				game_screen.set_opponent_connected(bool(data.get("connected", true)))

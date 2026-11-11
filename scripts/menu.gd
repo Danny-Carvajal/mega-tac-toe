@@ -904,6 +904,7 @@ func _make_button(text: String, color: Color) -> Button:
 
 
 func _style_button(button: Button, color: Color) -> void:
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	for state in ["normal", "hover", "pressed", "disabled"]:
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(14)

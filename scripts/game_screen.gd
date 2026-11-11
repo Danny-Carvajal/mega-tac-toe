@@ -26,6 +26,11 @@ var clocks_ms: Array = [0, 0, 0]
 ## Saltos por tiempo de cada jugador; con `max_skips` pierde.
 var skips: Array = [0, 0, 0]
 var max_skips := 3
+## Para reconstruir la partida si el servidor se reinicia (ver restore_payload).
+var move_log: Array = []
+var session_id := ""
+var _start_names: Array = []
+var _start_colors: Array = []
 var _clock_received_ms := 0
 var _result_text := ""
 ## Aviso temporal que reemplaza el estado (errores del servidor, reglas distintas).
@@ -100,6 +105,10 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 	my_seat = int(start.get("you", 0))
 	var server_names: Array = start.get("names", ["X", "O"])
 	var server_colors: Array = start.get("colors", [])
+	session_id = str(start.get("sid", ""))
+	_start_names = server_names.duplicate()
+	_start_colors = server_colors.duplicate()
+	move_log = []
 	names = ["", str(server_names[0]), str(server_names[1])]
 	colors = [Pal.muted, Profile.DEFAULT_X, Profile.DEFAULT_O]
 	if server_colors.size() == 2:
@@ -145,6 +154,7 @@ func apply_move(data: Dictionary) -> void:
 	if game.play(big, small):
 		last_move = Vector2i(big, small)
 		last_move_player = mover
+		move_log.append([big, small])
 	else:
 		push_warning("El servidor mandó una jugada que no es legal acá: %d,%d" % [big, small])
 	_set_clocks(data)
@@ -154,6 +164,7 @@ func apply_move(data: Dictionary) -> void:
 ## Al jugador de turno se le acabó el tiempo: le saltan el turno sin jugar.
 func apply_skip(data: Dictionary) -> void:
 	game.skip_turn()
+	move_log.append("s")
 	last_move = Vector2i(-1, -1)  # la jugada anterior se deshizo
 	var counts: Array = data.get("skips", [])
 	if counts.size() == 2:
@@ -212,6 +223,7 @@ func apply_resume(data: Dictionary) -> void:
 	var counts: Array = data.get("skips", [])
 	if counts.size() == 2:
 		skips = [0, int(counts[0]), int(counts[1])]
+	move_log = Array(data.get("log", [])).duplicate()
 	_set_clocks(data)
 	finished = false
 	disconnected = false
@@ -220,6 +232,29 @@ func apply_resume(data: Dictionary) -> void:
 	set_reconnecting(false)
 	set_opponent_connected(bool(data.get("opponent_connected", true)))
 	_refresh()
+
+
+## Lo que este cliente sabe de la partida: si el servidor se reinició y la perdió, los dos jugadores
+## se la devuelven (mensaje "restore") y la partida sigue donde estaba.
+func restore_payload(token: String) -> Dictionary:
+	var now := Time.get_ticks_msec()
+	var clocks: Array = []
+	for seat in [1, 2]:
+		var ms: int = clocks_ms[seat]
+		if not finished and not game.is_over() and game.current_player == seat:
+			ms = maxi(0, ms - (now - _clock_received_ms))
+		clocks.append(ms)
+	return {
+		"t": "restore",
+		"sid": session_id,
+		"token": token,
+		"seat": my_seat,
+		"names": _start_names,
+		"colors": _start_colors,
+		"log": move_log,
+		"skips": [skips[1], skips[2]],
+		"clocks": clocks,
+	}
 
 
 func on_disconnected() -> void:
@@ -857,6 +892,7 @@ func _flat(color: Color, radius: int = 10) -> StyleBoxFlat:
 
 
 func _style_button(button: Button, color: Color) -> void:
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	button.add_theme_stylebox_override("normal", _flat(color))
 	button.add_theme_stylebox_override("hover", _flat(color.lightened(0.15)))
 	button.add_theme_stylebox_override("pressed", _flat(color.lightened(0.3)))

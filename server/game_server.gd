@@ -10,6 +10,7 @@ extends Node
 ##   {t:"move", big, small}
 ##   {t:"resign"}
 ##   {t:"leave"}                            salir de la cola/sala de espera
+##   {t:"restore", sid, token, seat, names, colors, log, skips, clocks}  devolver una partida que el servidor perdió al reiniciarse
 ##   {t:"resume", token}                   volver a una partida en curso tras perder la conexión
 ## Mensajes servidor -> cliente:
 ##   {t:"waiting"}, {t:"room", code}
@@ -22,6 +23,7 @@ extends Node
 ##   {t:"error", msg}
 ##   {t:"resume_ok", you, names, colors, clocks, skips, log, ...}  estado completo para reanudar;
 ##       `log` son las jugadas [big,small] y "s" por cada salto, en orden
+##   {t:"restore_wait"}                     falta que el rival también devuelva la partida
 ##   {t:"resume_failed"}                    esa partida ya no existe
 ##   {t:"opponent", connected, grace_ms}    el rival perdió / recuperó la conexión
 
@@ -51,6 +53,7 @@ var _queue: Array[Conn] = []
 var _rooms := {}  # código -> Conn que espera
 var _finished := {}  # token -> {msg, until}: resultado para quien no estaba conectado al terminar
 var _sessions: Array[Session] = []
+var _restoring := {}  # sid -> {seats: {1: {conn, msg}, 2: ...}, since}
 var _rng := RandomNumberGenerator.new()
 var _color_regex := RegEx.create_from_string("^#[0-9a-fA-F]{6}$")
 
@@ -73,6 +76,7 @@ class Session:
 	var skips: Array = [0, 0, 0]
 	var over := false
 	var tokens: Array = ["", "", ""]
+	var sid := ""
 	var names: Array = []
 	var colors: Array = []
 	## Jugadas en orden: [big, small] o "s" (salto). Sirve para reconstruir la partida al reanudar.
@@ -142,6 +146,9 @@ func _process(_delta: float) -> void:
 				break
 		if not session.over and session.clock.is_expired(now):
 			_handle_timeout(session, now)
+	for sid in _restoring.keys():
+		if now - int(_restoring[sid]["since"]) > grace_ms * 2:
+			_restoring.erase(sid)
 	for token in _finished.keys():
 		if now > int(_finished[token]["until"]):
 			_finished.erase(token)
@@ -173,6 +180,8 @@ func _on_message(conn: Conn, text: String) -> void:
 			_leave_waiting(conn)
 		"resume":
 			_resume(conn, str(msg.get("token", "")))
+		"restore":
+			_restore(conn, msg)
 		"ping":
 			_send(conn, {"t": "pong"})
 
@@ -246,6 +255,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 	session.names = [a.player_name, b.player_name]
 	session.colors = [a.colors["x"], b.colors["o"]]
 	var crypto := Crypto.new()
+	session.sid = crypto.generate_random_bytes(8).hex_encode()
 	session.tokens[1] = crypto.generate_random_bytes(12).hex_encode()
 	session.tokens[2] = crypto.generate_random_bytes(12).hex_encode()
 	a.session = session
@@ -263,6 +273,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 			"t": "start",
 			"you": conn.seat,
 			"token": session.tokens[conn.seat],
+			"sid": session.sid,
 			"names": names,
 			"colors": colors,
 			"initial_ms": initial_ms,
@@ -354,6 +365,10 @@ func _finish(session: Session, winner: int, reason: String) -> void:
 
 func _drop(conn: Conn) -> void:
 	_conns.erase(conn)
+	for sid in _restoring.keys():
+		for seat in _restoring[sid]["seats"].keys():
+			if _restoring[sid]["seats"][seat]["conn"] == conn:
+				_restoring[sid]["seats"].erase(seat)
 	_leave_waiting(conn)
 	var session := conn.session
 	if session != null and not session.over:
@@ -407,6 +422,103 @@ func _resume(conn: Conn, token: String) -> void:
 					_send(other, {"t": "opponent", "connected": true})
 				return
 	_send(conn, {"t": "resume_failed"})
+
+
+## Repite la partida a partir de su registro. Devuelve null si el registro no es válido o ya terminó.
+func _replay(log: Array) -> UltimateGame:
+	var game := UltimateGame.new()
+	for entry in log:
+		if entry is Array and entry.size() == 2:
+			if not game.play(int(entry[0]), int(entry[1])):
+				return null
+		elif str(entry) == "s":
+			game.skip_turn()
+		else:
+			return null
+	return null if game.is_over() else game
+
+
+## El servidor se reinició y perdió las partidas: cada jugador manda lo que sabe y, cuando llegan
+## los dos con la misma partida (mismo `sid`), se reconstruye y sigue donde estaba.
+func _restore(conn: Conn, msg: Dictionary) -> void:
+	if conn.session != null:
+		return
+	var sid := str(msg.get("sid", ""))
+	var seat := int(msg.get("seat", 0))
+	var token := str(msg.get("token", ""))
+	var log = msg.get("log", [])
+	if sid.is_empty() or token.is_empty() or (seat != 1 and seat != 2) or typeof(log) != TYPE_ARRAY or _replay(log) == null:
+		_send(conn, {"t": "resume_failed"})
+		return
+	for session in _sessions:
+		if session.sid == sid:  # esa partida sí existe: que reanude normal
+			_send(conn, {"t": "resume_failed"})
+			return
+	var entry: Dictionary = _restoring.get(sid, {"seats": {}, "since": Time.get_ticks_msec()})
+	entry["seats"][seat] = {"conn": conn, "msg": msg}
+	_restoring[sid] = entry
+	var seats: Dictionary = entry["seats"]
+	if not (seats.has(1) and seats.has(2)):
+		_send(conn, {"t": "restore_wait"})
+		return
+	_restoring.erase(sid)
+	var msg1: Dictionary = seats[1]["msg"]
+	var msg2: Dictionary = seats[2]["msg"]
+	# Si uno se perdió el último mensaje, vale el registro más largo (si el otro es prefijo suyo).
+	var log1: Array = msg1["log"]
+	var log2: Array = msg2["log"]
+	var best: Array = log1 if log1.size() >= log2.size() else log2
+	var short: Array = log2 if log1.size() >= log2.size() else log1
+	if JSON.stringify(best.slice(0, short.size())) != JSON.stringify(short):
+		for seat_key in [1, 2]:
+			_send(seats[seat_key]["conn"], {"t": "resume_failed"})
+		return
+	var session := Session.new()
+	session.sid = sid
+	session.game = _replay(best)
+	session.log = best.duplicate()
+	var now := Time.get_ticks_msec()
+	session.clock = TurnClock.new(initial_ms, increment_ms)
+	var names: Array = msg1.get("names", ["X", "O"])
+	session.names = [str(names[0]).left(16), str(names[1]).left(16)] if names.size() == 2 else ["X", "O"]
+	var colors: Array = msg1.get("colors", [])
+	session.colors = [DEFAULT_COLORS["x"], DEFAULT_COLORS["o"]]
+	if colors.size() == 2:
+		for i in 2:
+			if _color_regex.search(str(colors[i])) != null:
+				session.colors[i] = str(colors[i])
+	for seat_key in [1, 2]:
+		var m: Dictionary = seats[seat_key]["msg"]
+		var c: Conn = seats[seat_key]["conn"]
+		session.tokens[seat_key] = str(m["token"])
+		session.seats[seat_key] = c
+		c.session = session
+		c.seat = seat_key
+		var their_skips: Array = m.get("skips", [0, 0])
+		var their_clocks: Array = m.get("clocks", [initial_ms, initial_ms])
+		for i in 2:
+			if their_skips.size() == 2:
+				session.skips[i + 1] = maxi(session.skips[i + 1], clampi(int(their_skips[i]), 0, MAX_SKIPS - 1))
+		for i in 2:
+			if their_clocks.size() == 2:
+				var ms := clampi(int(their_clocks[i]), 1000, initial_ms + increment_ms * 100)
+				# Se toma el menor de los dos reportes: ninguno puede inventarse más tiempo.
+				session.clock.banks[i + 1] = ms if seat_key == 1 else mini(int(session.clock.banks[i + 1]), ms)
+	_sessions.append(session)
+	session.clock.start(session.game.current_player, now)
+	for seat_key in [1, 2]:
+		_send(session.seats[seat_key], {
+			"t": "resume_ok",
+			"you": seat_key,
+			"names": session.names,
+			"colors": session.colors,
+			"max_skips": MAX_SKIPS,
+			"rules": UltimateGame.RULES_VERSION,
+			"clocks": session.clock.snapshot(now),
+			"skips": [session.skips[1], session.skips[2]],
+			"log": session.log,
+			"opponent_connected": true,
+		})
 
 
 func _broadcast(session: Session, data: Dictionary) -> void:

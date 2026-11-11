@@ -58,6 +58,16 @@ func _run() -> void:
 	app.menu.cancel_button.pressed.emit()
 	check(not app.menu.cancel_button.visible and not app.menu._action_buttons[0].disabled, "Cancelar vuelve el menú a la normalidad")
 
+	# Restore: el cliente arma lo que sabe de la partida
+	var rgs := GameScreen.new()
+	rgs.setup_online({"you": 1, "names": ["Ana", "Beto"], "colors": ["#ff0000", "#0000ff"], "sid": "s1", "clocks": [60000, 60000]}, Profile.new())
+	root.add_child(rgs)
+	await process_frame
+	rgs.apply_move({"big": 4, "small": 4, "clocks": [60000, 60000]})
+	var payload := rgs.restore_payload("tok")
+	check(payload["t"] == "restore" and payload["sid"] == "s1" and payload["log"] == [[4, 4]] and payload["seat"] == 1 and payload["token"] == "tok", "restore_payload lleva sid, registro y token")
+	rgs.free()
+
 	# Modo claro desde el pop up de ajustes
 	app.menu.theme_button.pressed.emit()
 	await create_timer(0.5).timeout
