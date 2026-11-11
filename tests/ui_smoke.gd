@@ -102,23 +102,17 @@ func _run() -> void:
 	check(not app.menu.nav.visible, "en compu no hay barra de pestañas")
 	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x < 0.0 and app.menu.stats_page.position.x > 0.0, "en compu se ve una sola página, las otras a los costados")
 	check(app.menu._edges[0].visible and app.menu._edges[1].visible and app.menu._edges[0].label == "Colores" and app.menu._edges[1].label == "Estadísticas", "en compu hay zonas de hover a los costados")
-	for _i in 4:
-		app.menu.edge_tick(0.1, Vector2(1850, 500))
+	app.menu.edge_tick(0.1, Vector2(1850, 500))
+	check(app.menu._edges[1].progress > 0.0 and app.menu._edges[0].progress == 0.0, "el mouse encima resalta el botón del costado")
+	check(app.menu.page == 1, "el hover solo resalta, no cambia de pantalla")
+	_click_at(app, Vector2(1850, 500))
 	await create_timer(0.5).timeout
-	check(app.menu.page == 2 and app.menu.stats_page.position.x == 0.0 and not app.menu._edges[1].visible, "hover a la derecha abre estadísticas")
-	app.menu.edge_tick(0.1, Vector2(960, 500))
-	for _i in 4:
-		app.menu.edge_tick(0.1, Vector2(40, 500))
-	check(app.menu.page == 1, "hover a la izquierda vuelve al menú")
-	for _i in 6:
-		app.menu.edge_tick(0.1, Vector2(40, 500))
-	check(app.menu.page == 1, "no encadena páginas mientras el mouse sigue en el borde")
-	await create_timer(0.3).timeout
-	app.menu.edge_tick(0.1, Vector2(960, 500))
-	app.menu.set_page(1, false)
-	for _i in 6:
-		app.menu.edge_tick(0.1, Vector2(1850, 40))
-	check(app.menu.page == 1, "la esquina de arriba no activa el hover")
+	check(app.menu.page == 2 and app.menu.stats_page.position.x == 0.0 and not app.menu._edges[1].visible, "clic en el costado derecho abre estadísticas")
+	_click_at(app, Vector2(40, 500))
+	await create_timer(0.4).timeout
+	check(app.menu.page == 1, "clic en el costado izquierdo vuelve al menú")
+	_click_at(app, Vector2(1850, 40))
+	check(app.menu.page == 1, "la esquina de arriba (engranaje) no cambia de pantalla")
 	check(not app.menu.private_box.visible, "las opciones de sala privada están ocultas al inicio")
 	app.menu._set_private_open(true)
 	check(app.menu.private_box.visible, "Privado muestra crear sala y código")
@@ -356,3 +350,11 @@ func check(condition: bool, name: String) -> void:
 	else:
 		failures += 1
 		print("  FAIL %s" % name)
+
+
+func _click_at(app: Control, point: Vector2) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = point
+	app.menu._input(ev)

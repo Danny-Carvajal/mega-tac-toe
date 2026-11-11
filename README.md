@@ -14,11 +14,11 @@ Ultimate Tic Tac Toe hecho en Godot 4, pensado para móvil y web, con partidas o
 
 ## Turnos con reloj (estilo Polytopia "Live Game")
 
-- Cada jugador arranca con un banco de 3 minutos. El reloj corre solo en su turno.
-- Al jugar se le suman 30 s; lo que no gastó se acumula para los próximos turnos.
+- Cada jugador arranca con un banco de 5 minutos. El reloj corre solo en su turno.
+- Al jugar se le suman 45 s; lo que no gastó se acumula para los próximos turnos.
 - Si se queda sin tiempo le **saltan el turno**: el rival deshace su última jugada y la vuelve a elegir,
   ya sabiendo que el otro no responde (así piensa en su propia ventaja). Al que saltaron se le repone un
-  banco de 60 s. Con **3 saltos pierde** la partida.
+  banco de 90 s. Con **3 saltos pierde** la partida.
 - Todos los valores se cambian con argumentos del servidor: `--initial`, `--increment`, `--skip_refill` (en ms).
 
 ## Menú

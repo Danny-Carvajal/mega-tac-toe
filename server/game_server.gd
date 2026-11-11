@@ -40,10 +40,10 @@ const IDLE_MS := 70000
 const RESULT_KEEP_MS := 300000
 
 var port := 9080
-var initial_ms := 180000
-var increment_ms := 30000
+var initial_ms := 300000
+var increment_ms := 45000
 ## Banco que se le repone a quien se pasó de tiempo y le saltaron el turno.
-var skip_refill_ms := 60000
+var skip_refill_ms := 90000
 ## Tiempo que se espera a que un jugador desconectado vuelva antes de darle la derrota.
 var grace_ms := 60000
 

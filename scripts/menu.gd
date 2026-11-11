@@ -21,7 +21,6 @@ const WIDE_SCALES := [0.62, 0.9, 0.62]
 const WIDE_CONTENT_W := 1000.0
 const EDGE_W := 190.0
 const EDGE_TOP := 130.0
-const EDGE_DWELL := 0.2
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 const COLOR_WIN := Color("3ecf8e")
@@ -64,9 +63,6 @@ var _action_buttons: Array[Button] = []
 var _chevrons: Array[Control] = []
 var _dividers: Array[ColorRect] = []
 var _edges: Array[EdgeZone] = []
-var _edge_idx := -1
-var _edge_t := 0.0
-var _edge_blocked := 0
 var _reset_armed := false
 var _swatch_x: Button
 var _swatch_o: Button
@@ -693,37 +689,14 @@ func _edge_side(point: Vector2) -> int:
 	return 0
 
 
-## Mouse quieto un ratito en el costado = cambia de pantalla. Después de cambiar hay que salir del costado
-## para que no encadene a la página siguiente.
+## Los costados de compu son botones (sin bordes): el mouse encima los resalta y el clic cambia de pantalla.
 func edge_tick(delta: float, mouse: Vector2) -> void:
 	var side := _edge_side(mouse)
 	if server_panel.visible or _dragging:
 		side = 0
-	if side == 0 or side != _edge_blocked:
-		_edge_blocked = 0 if side == 0 else _edge_blocked
-	var hit := -1
-	for i in _edges.size():
-		var edge := _edges[i]
-		edge.progress = 0.0 if i != _edge_idx else edge.progress
-		if edge.visible and edge.dir == side and side != _edge_blocked:
-			hit = i
-	if hit == -1:
-		_edge_idx = -1
-		_edge_t = 0.0
-		for edge in _edges:
-			edge.progress = 0.0
-		return
-	if hit != _edge_idx:
-		_edge_idx = hit
-		_edge_t = 0.0
-	_edge_t += delta
-	_edges[hit].progress = _edge_t / EDGE_DWELL
-	if _edge_t >= EDGE_DWELL:
-		_edge_blocked = side
-		_edge_idx = -1
-		_edge_t = 0.0
-		_edges[hit].progress = 0.0
-		set_page(page + side)
+	for edge in _edges:
+		var target := 1.0 if (edge.visible and edge.dir == side) else 0.0
+		edge.progress = move_toward(edge.progress, target, delta * 6.0)
 
 
 func _layout_edges() -> void:
@@ -761,7 +734,6 @@ func _input(event: InputEvent) -> void:
 		if side != 0:
 			for edge in _edges:
 				if edge.visible and edge.dir == side:
-					_edge_blocked = side
 					set_page(page + side)
 					get_viewport().set_input_as_handled()
 					return
@@ -1181,15 +1153,9 @@ class EdgeZone extends Control:
 
 	func _draw() -> void:
 		var f := clampf(progress, 0.0, 1.0)
-		var edge_alpha := (0.35 + 0.35 * f) * (0.4 if Pal.light else 1.0)
+		# Botón plano sin borde que cubre todo el costado; se aclara al pasar el mouse.
 		var base := Pal.text if Pal.light else Color.BLACK
-		var outer := Color(base, edge_alpha * (0.5 if Pal.light else 1.0))
-		var inner := Color(base, 0.0)
-		var left_colors := PackedColorArray([outer, inner, inner, outer])
-		var points := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
-		if dir > 0:
-			left_colors = PackedColorArray([inner, outer, outer, inner])
-		draw_polygon(points, left_colors)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(base, (0.18 + 0.22 * f) * (0.5 if Pal.light else 1.0)))
 		var mid := size.y / 2.0
 		var cx := size.x * 0.5
 		var alpha := 0.35 + 0.65 * f
