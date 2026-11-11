@@ -1,4 +1,6 @@
 extends SceneTree
+
+const Pal := preload("res://scripts/pal.gd")
 ## Smoke test de las pantallas: menú, juego local y juego online simulado.
 ##   godot --headless --quit-after 600 -s tests/ui_smoke.gd
 
@@ -49,6 +51,16 @@ func _run() -> void:
 	await create_timer(0.5).timeout
 	check(not app.menu.colors_open, "swipe a la izquierda vuelve")
 	app.menu.color_o = Profile.DEFAULT_O
+
+	# Modo claro desde el pop up de ajustes
+	app.menu.theme_button.pressed.emit()
+	await create_timer(0.5).timeout
+	check(app.profile.light_mode and Pal.light and app.menu.server_panel.visible, "modo claro: cambia la paleta y reabre ajustes")
+	check(app.menu.theme_button.text == "Modo claro: sí", "el botón de tema refleja el estado")
+	app.menu.theme_button.pressed.emit()
+	await create_timer(0.5).timeout
+	check(not app.profile.light_mode and not Pal.light, "modo claro: se puede volver a oscuro")
+	app.menu.server_panel.visible = false
 
 	# Estadísticas: nav, registro de resultados
 	app.menu.apply_layout(false)

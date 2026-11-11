@@ -6,18 +6,12 @@ signal move_requested(big: int, small: int)
 signal resign_requested
 signal exit_requested
 
+const Pal := preload("res://scripts/pal.gd")
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 
-const COLOR_BG := Color("14151f")
-const COLOR_PANEL := Color("22253a")
-const COLOR_ACTIVE := Color("3d4a7a")
-const COLOR_CELL := Color("2d3048")
 ## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
-const COLOR_CELL_OFF := Color("2a2d45")
-const COLOR_DRAW := Color("8a8fa8")
-const COLOR_TEXT := Color("e8eaf6")
 const ARROW_ALPHA := 0.7
 
 var game := UltimateGame.new()
@@ -26,7 +20,7 @@ var my_seat := 0
 var finished := false
 var disconnected := false
 ## Colores, nombres y relojes por asiento. Índice 1 = X, 2 = O (el 0 no se usa).
-var colors: Array = [COLOR_DRAW, Profile.DEFAULT_X, Profile.DEFAULT_O]
+var colors: Array = [Pal.muted, Profile.DEFAULT_X, Profile.DEFAULT_O]
 var names: Array = ["", "X", "O"]
 var clocks_ms: Array = [0, 0, 0]
 ## Saltos por tiempo de cada jugador; con `max_skips` pierde.
@@ -94,7 +88,7 @@ func setup_local(profile: Profile) -> void:
 	online = false
 	arrow_tip_color = profile.color_x
 	arrow_base_color = profile.color_o
-	colors = [COLOR_DRAW, profile.color_x, profile.color_o]
+	colors = [Pal.muted, profile.color_x, profile.color_o]
 	names = ["", "X", "O"]
 
 
@@ -107,7 +101,7 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 	var server_names: Array = start.get("names", ["X", "O"])
 	var server_colors: Array = start.get("colors", [])
 	names = ["", str(server_names[0]), str(server_names[1])]
-	colors = [COLOR_DRAW, Profile.DEFAULT_X, Profile.DEFAULT_O]
+	colors = [Pal.muted, Profile.DEFAULT_X, Profile.DEFAULT_O]
 	if server_colors.size() == 2:
 		colors[1] = Color.html(str(server_colors[0]))
 		colors[2] = Color.html(str(server_colors[1]))
@@ -262,7 +256,7 @@ func _resolve_color_clash() -> void:
 	if _color_distance(colors[mine], colors[theirs]) < 0.35:
 		colors[theirs] = Profile.DEFAULT_X if theirs == 1 else Profile.DEFAULT_O
 		if _color_distance(colors[mine], colors[theirs]) < 0.35:
-			colors[theirs] = COLOR_DRAW
+			colors[theirs] = Pal.muted
 
 
 func _color_distance(a: Color, b: Color) -> float:
@@ -273,7 +267,7 @@ func _color_distance(a: Color, b: Color) -> float:
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.color = COLOR_BG
+	bg.color = Pal.bg
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -307,7 +301,7 @@ func _build_ui() -> void:
 	status_label.add_theme_font_size_override("font_size", 52)
 	turn_banner = PanelContainer.new()
 	turn_banner.add_child(status_label)
-	_style_banner(Color("3a3f5c"), false)
+	_style_banner(Pal.banner, false)
 	root.add_child(turn_banner)
 
 	var ratio := AspectRatioContainer.new()
@@ -332,24 +326,24 @@ func _build_ui() -> void:
 
 	bottom_row = BoxContainer.new()
 	root.add_child(bottom_row)
-	left_button = _make_button("Menú", COLOR_CELL)
+	left_button = _make_button("Menú", Pal.cell)
 	left_button.pressed.connect(_on_left_pressed)
 	bottom_row.add_child(left_button)
 
 	if not online:
-		new_game_button = _make_button("Nueva partida", COLOR_ACTIVE)
+		new_game_button = _make_button("Nueva partida", Pal.active)
 		new_game_button.pressed.connect(_on_new_game_pressed)
 		buttons.add_child(new_game_button)
 
-	notes_button = _make_button("Apuntes", COLOR_CELL)
+	notes_button = _make_button("Apuntes", Pal.cell)
 	notes_button.toggle_mode = true
-	notes_button.add_theme_stylebox_override("pressed", _flat(Color("3b6f8f")))
-	notes_button.add_theme_stylebox_override("hover_pressed", _flat(Color("3b6f8f")))
+	notes_button.add_theme_stylebox_override("pressed", _flat(Pal.notes_on))
+	notes_button.add_theme_stylebox_override("hover_pressed", _flat(Pal.notes_on))
 	for font_state in ["font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
-		notes_button.add_theme_color_override(font_state, COLOR_TEXT)
+		notes_button.add_theme_color_override(font_state, Pal.text)
 	notes_button.toggled.connect(_on_notes_toggled)
 	buttons.add_child(notes_button)
-	clear_notes_button = _make_button("Borrar", COLOR_CELL)
+	clear_notes_button = _make_button("Borrar", Pal.cell)
 	clear_notes_button.visible = false
 	clear_notes_button.pressed.connect(clear_arrows)
 	buttons.add_child(clear_notes_button)
@@ -413,7 +407,7 @@ func _make_button(text: String, color: Color) -> Button:
 	button.custom_minimum_size = Vector2(0, 120)
 	button.add_theme_font_size_override("font_size", 44)
 	for font_state in ["font_color", "font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
-		button.add_theme_color_override(font_state, COLOR_TEXT)
+		button.add_theme_color_override(font_state, Pal.text)
 	_style_button(button, color)
 	return button
 
@@ -443,7 +437,7 @@ func _build_big_cell(parent: GridContainer, big: int) -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 56)
-		_style_button(button, COLOR_CELL)
+		_style_button(button, Pal.cell)
 		button.pressed.connect(_on_small_pressed.bind(big, small))
 		grid.add_child(button)
 		row.append(button)
@@ -510,8 +504,8 @@ func _build_confirm_dialog() -> void:
 	confirm_layer.add_child(center)
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(820, 0)
-	var style := _flat(Color("1f2133"), 24)
-	style.border_color = COLOR_ACTIVE
+	var style := _flat(Pal.card, 24)
+	style.border_color = Pal.active
 	style.set_border_width_all(3)
 	style.set_content_margin_all(48)
 	card.add_theme_stylebox_override("panel", style)
@@ -523,21 +517,22 @@ func _build_confirm_dialog() -> void:
 	title.text = "¿Seguro que te rendís?"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 56)
-	title.add_theme_color_override("font_color", COLOR_TEXT)
+	title.add_theme_color_override("font_color", Pal.text)
 	box.add_child(title)
 	var note := Label.new()
 	note.text = "Perdés la partida."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.add_theme_font_size_override("font_size", 38)
-	note.add_theme_color_override("font_color", COLOR_DRAW)
+	note.add_theme_color_override("font_color", Pal.muted)
 	box.add_child(note)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 24)
 	box.add_child(row)
-	var keep := _make_button("Seguir jugando", COLOR_ACTIVE)
+	var keep := _make_button("Seguir jugando", Pal.active)
 	keep.pressed.connect(func() -> void: confirm_layer.visible = false)
 	row.add_child(keep)
 	var yes := _make_button("Rendirme", Color("8f2f34"))
+	_white_text(yes)
 	yes.pressed.connect(_confirm_resign)
 	row.add_child(yes)
 
@@ -565,12 +560,12 @@ func _apply_highlight() -> void:
 	if _highlighted.x >= 0:
 		var old: Button = small_buttons[_highlighted.x][_highlighted.y]
 		old.modulate.a = 1.0
-		_style_button(old, COLOR_CELL)
+		_style_button(old, Pal.cell)
 	_highlighted = target
 	if target.x >= 0:
 		var button: Button = small_buttons[target.x][target.y]
 		var color: Color = colors[last_move_player]
-		var base := COLOR_CELL.lerp(color, 0.28)
+		var base := Pal.cell.lerp(color, 0.28)
 		for state in ["normal", "hover", "pressed", "disabled"]:
 			var style := _flat(base)
 			style.border_color = color
@@ -718,7 +713,7 @@ func _refresh() -> void:
 	for big in 9:
 		var board_result: int = game.board_results[big]
 		var decided := board_result != UltimateGame.NONE
-		var panel_color := COLOR_ACTIVE if playable_boards.has(big) else COLOR_PANEL
+		var panel_color := Pal.active if playable_boards.has(big) else Pal.panel
 		if decided:
 			panel_color = panel_color.lerp(_mark_color(board_result), 0.12)
 		panels[big].add_theme_stylebox_override("panel", _flat(panel_color, 18))
@@ -749,7 +744,7 @@ func _refresh() -> void:
 
 	if online:
 		left_button.text = "Volver al menú" if finished else "Rendirse"
-		_style_button(left_button, COLOR_CELL if finished else COLOR_RESIGN)
+		_style_button(left_button, Pal.cell if finished else COLOR_RESIGN)
 	_refresh_status()
 	_refresh_clocks()
 
@@ -757,22 +752,22 @@ func _refresh() -> void:
 func _refresh_status() -> void:
 	if not _notice.is_empty() and not finished:
 		status_label.text = _notice
-		status_label.add_theme_color_override("font_color", Color("ffd24d"))
-		_style_banner(Color("3a3f5c"), false)
+		status_label.add_theme_color_override("font_color", Pal.notice)
+		_style_banner(Pal.banner, false)
 		return
 	if finished and online:
 		status_label.text = _result_text
-		status_label.add_theme_color_override("font_color", COLOR_TEXT)
-		_style_banner(Color("3a3f5c"), false)
+		status_label.add_theme_color_override("font_color", Pal.text)
+		_style_banner(Pal.banner, false)
 		return
 	if game.is_over():
 		if game.result == UltimateGame.DRAW:
 			status_label.text = "Empate"
-			status_label.add_theme_color_override("font_color", COLOR_DRAW)
-			_style_banner(COLOR_DRAW, false)
+			status_label.add_theme_color_override("font_color", Pal.muted)
+			_style_banner(Pal.muted, false)
 		else:
 			status_label.text = "Ganó %s" % _mark_text(game.result)
-			status_label.add_theme_color_override("font_color", _mark_color(game.result))
+			status_label.add_theme_color_override("font_color", Color.WHITE)
 			_style_banner(_mark_color(game.result), true)
 		return
 
@@ -784,7 +779,7 @@ func _refresh_status() -> void:
 	if game.forced_board == -1 and (not online or game.current_player == my_seat):
 		text += " - elegí cualquier tablero"
 	status_label.text = text
-	status_label.add_theme_color_override("font_color", COLOR_TEXT if (not online or game.current_player == my_seat) else _mark_color(game.current_player))
+	status_label.add_theme_color_override("font_color", Color.WHITE if (not online or game.current_player == my_seat) else _mark_color(game.current_player))
 	var mine := not online or game.current_player == my_seat
 	_style_banner(_mark_color(game.current_player), mine)
 	var key := "%d:%d" % [game.current_player, game.cells.count(UltimateGame.NONE)]
@@ -845,7 +840,13 @@ func _mark_color(mark: int) -> Color:
 			return colors[1]
 		UltimateGame.O:
 			return colors[2]
-	return COLOR_DRAW
+	return Pal.muted
+
+
+func _white_text(button: Button, white := true) -> void:
+	var color := Color.WHITE if white else Pal.text
+	for font_state in ["font_color", "font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
+		button.add_theme_color_override(font_state, color)
 
 
 func _flat(color: Color, radius: int = 10) -> StyleBoxFlat:
@@ -859,7 +860,7 @@ func _style_button(button: Button, color: Color) -> void:
 	button.add_theme_stylebox_override("normal", _flat(color))
 	button.add_theme_stylebox_override("hover", _flat(color.lightened(0.15)))
 	button.add_theme_stylebox_override("pressed", _flat(color.lightened(0.3)))
-	var off := COLOR_CELL_OFF if color == COLOR_CELL else color.darkened(0.25)
+	var off := Pal.cell_off if color == Pal.cell else color.darkened(0.25)
 	button.add_theme_stylebox_override("disabled", _flat(off))
 
 

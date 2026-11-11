@@ -3,19 +3,16 @@ extends Control
 ## salas, local) y, a la izquierda, la de colores. Se pasa de una a otra con swipe o con la
 ## flecha. La dirección del servidor vive en una cascada arriba a la derecha.
 
+signal appearance_changed
 signal local_requested
 signal online_requested(kind: String, code: String)
 signal cancel_requested
 
+const Pal := preload("res://scripts/pal.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Stats := preload("res://scripts/stats.gd")
 
-const COLOR_BG := Color("14151f")
-const COLOR_CELL := Color("2d3048")
-const COLOR_ACTIVE := Color("3d4a7a")
-const COLOR_TEXT := Color("e8eaf6")
-const COLOR_MUTED := Color("8a8fa8")
 
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
 const NAV_HEIGHT := 170.0
@@ -23,12 +20,11 @@ const NAV_HEIGHT := 170.0
 const WIDE_SCALES := [0.62, 0.9, 0.62]
 const WIDE_CONTENT_W := 1000.0
 const EDGE_W := 190.0
+const EDGE_TOP := 130.0
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 const COLOR_WIN := Color("3ecf8e")
 const COLOR_LOSS := Color("e5484d")
-const COLOR_DRAW := Color("8a8fa8")
-const COLOR_CARD := Color("1f2133")
 
 var profile: Profile
 var color_x: Color
@@ -48,6 +44,7 @@ var cancel_button: Button
 var picker: ColorPicker
 var server_panel: PanelContainer
 var server_button: Button
+var theme_button: Button
 var private_button: Button
 var private_box: VBoxContainer
 var main_page: Control
@@ -137,7 +134,7 @@ func set_page(index: int, animate := true) -> void:
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.color = COLOR_BG
+	bg.color = Pal.bg
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
@@ -159,7 +156,7 @@ func _build_ui() -> void:
 
 	for i in 2:
 		var divider := ColorRect.new()
-		divider.color = COLOR_CELL
+		divider.color = Pal.cell
 		divider.visible = false
 		divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(divider)
@@ -202,20 +199,26 @@ func _page_root(page: Control) -> VBoxContainer:
 func _build_main_page() -> void:
 	var root := _page_root(main_page)
 
-	var top := HBoxContainer.new()
-	root.add_child(top)
-	var top_spacer := Control.new()
-	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(top_spacer)
-	server_button = _make_small_button("Servidor")
+	var top_space := Control.new()
+	top_space.custom_minimum_size = Vector2(0, 40)
+	root.add_child(top_space)
+
+	# Engranaje chico en la esquina: abre el pop up de ajustes.
+	server_button = GearButton.new()
 	server_button.pressed.connect(_toggle_server_panel)
-	top.add_child(server_button)
+	main_page.add_child(server_button)
+	server_button.anchor_left = 1.0
+	server_button.anchor_right = 1.0
+	server_button.offset_left = -104.0
+	server_button.offset_right = -24.0
+	server_button.offset_top = 24.0
+	server_button.offset_bottom = 104.0
 
 	var title := Label.new()
 	title.text = "Mega Tac Toe"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 120)
-	title.add_theme_color_override("font_color", COLOR_TEXT)
+	title.add_theme_color_override("font_color", Pal.text)
 	root.add_child(title)
 
 	root.add_child(_caption("Tu nombre"))
@@ -228,7 +231,7 @@ func _build_main_page() -> void:
 	play_row.add_theme_constant_override("separation", 20)
 	root.add_child(play_row)
 
-	var local := _make_button("Local", COLOR_CELL)
+	var local := _make_button("Local", Pal.cell)
 	local.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	local.size_flags_stretch_ratio = 1.0
 	local.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -241,7 +244,7 @@ func _build_main_page() -> void:
 		local_requested.emit())
 	play_row.add_child(local)
 
-	var quick := _make_button("JUGAR", COLOR_ACTIVE)
+	var quick := _make_button("JUGAR", Pal.active)
 	quick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	quick.size_flags_stretch_ratio = 2.4
 	quick.custom_minimum_size = Vector2(0, 220)
@@ -249,7 +252,7 @@ func _build_main_page() -> void:
 	quick.pressed.connect(func() -> void: _request("queue", ""))
 	play_row.add_child(quick)
 
-	private_button = _make_button("Privado", COLOR_CELL)
+	private_button = _make_button("Privado", Pal.cell)
 	private_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	private_button.size_flags_stretch_ratio = 1.0
 	private_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -263,7 +266,7 @@ func _build_main_page() -> void:
 	private_box.add_theme_constant_override("separation", 20)
 	private_box.visible = false
 	root.add_child(private_box)
-	var create := _make_button("Crear sala", COLOR_CELL)
+	var create := _make_button("Crear sala", Pal.cell)
 	create.pressed.connect(func() -> void: _request("create", ""))
 	private_box.add_child(create)
 	var join_row := HBoxContainer.new()
@@ -273,7 +276,7 @@ func _build_main_page() -> void:
 	code_edit.max_length = 4
 	code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	join_row.add_child(code_edit)
-	var join := _make_button("Unirme", COLOR_CELL)
+	var join := _make_button("Unirme", Pal.cell)
 	join.size_flags_horizontal = Control.SIZE_SHRINK_END
 	join.custom_minimum_size = Vector2(360, 120)
 	join.pressed.connect(func() -> void: _request("join", code_edit.text.strip_edges().to_upper()))
@@ -283,10 +286,10 @@ func _build_main_page() -> void:
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 40)
-	status_label.add_theme_color_override("font_color", COLOR_TEXT)
+	status_label.add_theme_color_override("font_color", Pal.text)
 	root.add_child(status_label)
 
-	cancel_button = _make_button("Cancelar", COLOR_CELL)
+	cancel_button = _make_button("Cancelar", Pal.cell)
 	cancel_button.visible = false
 	cancel_button.pressed.connect(func() -> void: cancel_requested.emit())
 	root.add_child(cancel_button)
@@ -318,7 +321,7 @@ func _build_colors_page() -> void:
 	heading.text = "Tus colores"
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_theme_font_size_override("font_size", 64)
-	heading.add_theme_color_override("font_color", COLOR_TEXT)
+	heading.add_theme_color_override("font_color", Pal.text)
 	top.add_child(heading)
 
 	root.add_child(_caption("Elegí una pieza y cambiale el color"))
@@ -393,7 +396,7 @@ func _build_stats_page() -> void:
 	var heading := Label.new()
 	heading.text = "Estadísticas"
 	heading.add_theme_font_size_override("font_size", 64)
-	heading.add_theme_color_override("font_color", COLOR_TEXT)
+	heading.add_theme_color_override("font_color", Pal.text)
 	root.add_child(heading)
 	root.add_child(_caption("Tus partidas online"))
 
@@ -407,7 +410,7 @@ func _build_stats_page() -> void:
 	tiles.add_theme_constant_override("separation", 20)
 	root.add_child(tiles)
 	tiles.add_child(_stat_tile("Victorias", str(stats.wins), COLOR_WIN))
-	tiles.add_child(_stat_tile("Empates", str(stats.draws), COLOR_DRAW))
+	tiles.add_child(_stat_tile("Empates", str(stats.draws), Pal.muted))
 	tiles.add_child(_stat_tile("Derrotas", str(stats.losses), COLOR_LOSS))
 
 	var bar := StackBar.new()
@@ -418,7 +421,7 @@ func _build_stats_page() -> void:
 	streaks.add_theme_constant_override("separation", 20)
 	root.add_child(streaks)
 	var streak_text := "—"
-	var streak_color := COLOR_MUTED
+	var streak_color := Pal.muted
 	if stats.streak > 0:
 		streak_text = "%d %s" % [stats.streak, "victoria" if stats.streak == 1 else "victorias"]
 		streak_color = COLOR_WIN
@@ -426,7 +429,7 @@ func _build_stats_page() -> void:
 		streak_text = "%d %s" % [-stats.streak, "derrota" if stats.streak == -1 else "derrotas"]
 		streak_color = COLOR_LOSS
 	streaks.add_child(_stat_tile("Racha actual", streak_text, streak_color, 44))
-	streaks.add_child(_stat_tile("Mejor racha", str(stats.best_streak) if stats.best_streak > 0 else "—", COLOR_TEXT, 44))
+	streaks.add_child(_stat_tile("Mejor racha", str(stats.best_streak) if stats.best_streak > 0 else "—", Pal.text, 44))
 
 	root.add_child(_caption("Últimas partidas"))
 	var dots := RecentDots.new()
@@ -469,7 +472,7 @@ func _stat_tile(label_text: String, value_text: String, color: Color, value_size
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style := StyleBoxFlat.new()
-	style.bg_color = COLOR_CARD
+	style.bg_color = Pal.card
 	style.set_corner_radius_all(18)
 	style.set_content_margin_all(22)
 	card.add_theme_stylebox_override("panel", style)
@@ -486,7 +489,7 @@ func _stat_tile(label_text: String, value_text: String, color: Color, value_size
 	caption.text = label_text
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	caption.add_theme_font_size_override("font_size", 32)
-	caption.add_theme_color_override("font_color", COLOR_MUTED)
+	caption.add_theme_color_override("font_color", Pal.muted)
 	box.add_child(caption)
 	return card
 
@@ -496,34 +499,44 @@ func _build_server_panel() -> void:
 	server_panel.visible = false
 	server_panel.custom_minimum_size = Vector2(900, 0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("1f2133")
-	style.border_color = COLOR_ACTIVE
+	style.bg_color = Pal.card
+	style.border_color = Pal.active
 	style.set_border_width_all(3)
 	style.set_corner_radius_all(18)
 	style.set_content_margin_all(28)
 	server_panel.add_theme_stylebox_override("panel", style)
 	main_page.add_child(server_panel)
+	server_panel.visibility_changed.connect(_update_edges)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 20)
 	server_panel.add_child(box)
+	var heading := Label.new()
+	heading.text = "Ajustes"
+	heading.add_theme_font_size_override("font_size", 52)
+	heading.add_theme_color_override("font_color", Pal.text)
+	box.add_child(heading)
 	box.add_child(_caption("Servidor"))
 	url_edit = _make_edit(profile.server_url, "wss://...")
 	url_edit.add_theme_font_size_override("font_size", 34)
 	url_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL
 	box.add_child(url_edit)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
-	box.add_child(row)
 	var default_button := _make_small_button("Usar el de Render")
-	default_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	default_button.pressed.connect(func() -> void:
 		url_edit.text = Profile.DEFAULT_SERVER_URL)
-	row.add_child(default_button)
+	box.add_child(default_button)
+	box.add_child(_caption("Apariencia"))
+	theme_button = _make_small_button("Modo claro: sí" if profile.light_mode else "Modo claro: no")
+	theme_button.pressed.connect(func() -> void:
+		if not _taps_allowed():
+			return
+		profile.light_mode = not profile.light_mode
+		_save_profile()
+		appearance_changed.emit())
+	box.add_child(theme_button)
 	var done := _make_small_button("Listo")
-	done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	done.pressed.connect(func() -> void: server_panel.visible = false)
-	row.add_child(done)
+	box.add_child(done)
 
 
 ## Pega la flecha al borde (izquierdo o derecho) de su página, centrada en vertical.
@@ -537,6 +550,12 @@ func _anchor_chevron(chevron: Control, right_edge: bool) -> void:
 	chevron.offset_right = 0.0 if right_edge else 64.0
 	chevron.offset_top = -120.0
 	chevron.offset_bottom = 120.0
+
+
+## Abre el pop up de ajustes (lo usa la app al reconstruir el menú tras cambiar de tema).
+func open_settings() -> void:
+	if not server_panel.visible:
+		_toggle_server_panel()
 
 
 func _toggle_server_panel() -> void:
@@ -600,7 +619,7 @@ func _layout_pages() -> void:
 
 func _set_private_open(open: bool) -> void:
 	private_box.visible = open
-	_style_button(private_button, COLOR_ACTIVE if open else COLOR_CELL)
+	_style_button(private_button, Pal.active if open else Pal.cell)
 	if open:
 		Fx.pop(private_box, 0.9, 0.2)
 
@@ -608,6 +627,7 @@ func _set_private_open(open: bool) -> void:
 func _layout_edges() -> void:
 	for edge in _edges:
 		edge.size = Vector2(EDGE_W, pager.size.y)
+		edge.top_dead = EDGE_TOP
 		edge.position = Vector2(0.0 if edge.dir < 0 else size.x - EDGE_W, 0.0)
 
 
@@ -616,7 +636,7 @@ func _update_edges() -> void:
 	var names := ["Colores", "Jugar", "Estadísticas"]
 	for edge in _edges:
 		var target: int = page + edge.dir
-		edge.visible = wide and target >= 0 and target <= 2
+		edge.visible = wide and target >= 0 and target <= 2 and not server_panel.visible
 		if edge.visible:
 			edge.label = names[target]
 			edge.queue_redraw()
@@ -771,7 +791,7 @@ func _caption(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_font_size_override("font_size", 34)
-	label.add_theme_color_override("font_color", COLOR_MUTED)
+	label.add_theme_color_override("font_color", Pal.muted)
 	return label
 
 
@@ -781,7 +801,22 @@ func _make_edit(text: String, placeholder: String) -> LineEdit:
 	edit.placeholder_text = placeholder
 	edit.custom_minimum_size = Vector2(0, 110)
 	edit.add_theme_font_size_override("font_size", 44)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Pal.panel
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 20
+	style.content_margin_right = 20
+	edit.add_theme_stylebox_override("normal", style)
+	edit.add_theme_stylebox_override("focus", style)
+	edit.add_theme_color_override("font_color", Pal.text)
+	edit.add_theme_color_override("font_placeholder_color", Pal.muted)
+	edit.add_theme_color_override("caret_color", Pal.text)
 	return edit
+
+
+func _text_colors(button: Button) -> void:
+	for font_state in ["font_color", "font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
+		button.add_theme_color_override(font_state, Pal.text)
 
 
 func _make_small_button(text: String) -> Button:
@@ -790,8 +825,8 @@ func _make_small_button(text: String) -> Button:
 	Fx.press_feedback(button)
 	button.custom_minimum_size = Vector2(0, 90)
 	button.add_theme_font_size_override("font_size", 36)
-	button.add_theme_color_override("font_color", COLOR_TEXT)
-	_style_button(button, COLOR_CELL)
+	_text_colors(button)
+	_style_button(button, Pal.cell)
 	return button
 
 
@@ -801,7 +836,7 @@ func _make_button(text: String, color: Color) -> Button:
 	Fx.press_feedback(button)
 	button.custom_minimum_size = Vector2(0, 120)
 	button.add_theme_font_size_override("font_size", 44)
-	button.add_theme_color_override("font_color", COLOR_TEXT)
+	_text_colors(button)
 	_style_button(button, color)
 	_action_buttons.append(button)
 	return button
@@ -841,7 +876,7 @@ class Chevron extends Button:
 			Vector2(c.x - dir * 14.0, c.y - 46.0),
 			Vector2(c.x + dir * 14.0, c.y),
 			Vector2(c.x - dir * 14.0, c.y + 46.0)]),
-			Color(1, 1, 1, alpha), 9.0, true)
+			Color(Pal.text, alpha), 9.0, true)
 
 
 ## Barra de pestañas de abajo. `position_f` es el índice (fraccional) de la página visible,
@@ -850,10 +885,6 @@ class NavBar extends Control:
 	signal tab_pressed(index: int)
 
 	const LABELS := ["Colores", "Jugar", "Estadísticas"]
-	const BAR := Color("181a29")
-	const PILL := Color("34406b")
-	const ACCENT := Color("8f95ad")
-
 	var position_f := 1.0
 	var colors: Array = [Color("e5484d"), Color("3b82f6")]
 	var _press_index := -1
@@ -879,16 +910,16 @@ class NavBar extends Control:
 				_press_index = -1
 
 	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), BAR)
-		draw_line(Vector2.ZERO, Vector2(size.x, 0), Color("2d3048"), 3.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Pal.bar)
+		draw_line(Vector2.ZERO, Vector2(size.x, 0), Pal.cell, 3.0)
 		var tab_w := size.x / LABELS.size()
 		var font := ThemeDB.fallback_font
 		for i in LABELS.size():
 			var w := clampf(1.0 - absf(position_f - i), 0.0, 1.0)
 			var rect := Rect2(i * tab_w + 14.0, 8.0 - 4.0 * w, tab_w - 28.0, size.y - 16.0 + 4.0 * w)
-			_pill.bg_color = BAR.lerp(PILL, w)
+			_pill.bg_color = Pal.bar.lerp(Pal.pill, w)
 			draw_style_box(_pill, rect)
-			draw_rect(Rect2(rect.position.x + 36.0, rect.position.y, rect.size.x - 72.0, 8.0), Color(ACCENT, w))
+			draw_rect(Rect2(rect.position.x + 36.0, rect.position.y, rect.size.x - 72.0, 8.0), Color(Pal.accent, w))
 			var center := Vector2(rect.position.x + rect.size.x / 2.0, size.y * 0.42 - 16.0 * w)
 			var scale := 1.0 + 0.3 * w
 			var alpha := 0.55 + 0.45 * w
@@ -897,7 +928,7 @@ class NavBar extends Control:
 				draw_circle(center + Vector2(17, 0) * scale, 27.0 * scale, Color(colors[1], alpha))
 			elif i == 2:
 				# Barritas de gráfico.
-				var bar := Color(0.91, 0.92, 0.96, alpha)
+				var bar := Color(Pal.text, alpha)
 				for k in 3:
 					var bar_height: float = [26.0, 46.0, 36.0][k] * scale
 					var bar_x := center.x + (k - 1) * 22.0 * scale
@@ -905,7 +936,7 @@ class NavBar extends Control:
 			else:
 				var half := 30.0 * scale
 				var third := half * 2.0 / 3.0
-				var line := Color(0.91, 0.92, 0.96, alpha)
+				var line := Color(Pal.text, alpha)
 				for k in [1, 2]:
 					var offset: float = -half + k * third
 					draw_line(center + Vector2(offset, -half), center + Vector2(offset, half), line, 7.0 * scale, true)
@@ -913,7 +944,7 @@ class NavBar extends Control:
 			if w > 0.01:
 				var text_size := font.get_string_size(LABELS[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 34)
 				draw_string(font, Vector2(center.x - text_size.x / 2.0, size.y - 26.0), LABELS[i],
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1, 1, 1, w))
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(Pal.text, w))
 
 
 ## Dona con el porcentaje de victorias (verde = victorias, gris = empates, rojo = derrotas).
@@ -941,12 +972,12 @@ class DonutChart extends Control:
 		var center := size / 2.0
 		var radius := 250.0
 		var width := 64.0
-		draw_arc(center, radius, 0.0, TAU, 96, Color("22253a"), width, true)
+		draw_arc(center, radius, 0.0, TAU, 96, Pal.panel, width, true)
 		var total: int = stats.total()
 		var font := ThemeDB.fallback_font
 		if total == 0:
-			_text(font, "—", center + Vector2(0, 30), 140, Color("8a8fa8"))
-			_text(font, "Sin partidas todavía", center + Vector2(0, 100), 36, Color("8a8fa8"))
+			_text(font, "—", center + Vector2(0, 30), 140, Pal.muted)
+			_text(font, "Sin partidas todavía", center + Vector2(0, 100), 36, Pal.muted)
 			return
 		var parts := [[stats.wins, WIN], [stats.draws, DRAW], [stats.losses, LOSS]]
 		var visible_parts := 0
@@ -965,8 +996,8 @@ class DonutChart extends Control:
 				draw_arc(center, radius, a0, a1, maxi(8, int(span * 30.0)), part[1], width, true)
 			start += span
 		var shown := int(round(stats.win_rate() * sweep))
-		_text(font, "%d%%" % shown, center + Vector2(0, 30), 150, Color("e8eaf6"))
-		_text(font, "de victorias", center + Vector2(0, 100), 40, Color("8a8fa8"))
+		_text(font, "%d%%" % shown, center + Vector2(0, 30), 150, Pal.text)
+		_text(font, "de victorias", center + Vector2(0, 100), 40, Pal.muted)
 
 	func _text(font: Font, text: String, anchor: Vector2, font_size: int, color: Color) -> void:
 		var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
@@ -982,7 +1013,7 @@ class StackBar extends Control:
 
 	func _draw() -> void:
 		var back := StyleBoxFlat.new()
-		back.bg_color = Color("22253a")
+		back.bg_color = Pal.panel
 		back.set_corner_radius_all(14)
 		draw_style_box(back, Rect2(Vector2.ZERO, size))
 		var total: int = stats.total()
@@ -1012,7 +1043,7 @@ class RecentDots extends Control:
 		var recent: Array = stats.recent
 		if recent.is_empty():
 			var font := ThemeDB.fallback_font
-			draw_string(font, Vector2(0, 40), "Todavía no jugaste partidas online", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color("8a8fa8"))
+			draw_string(font, Vector2(0, 40), "Todavía no jugaste partidas online", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Pal.muted)
 			return
 		var step := 52.0
 		var count := mini(recent.size(), int(size.x / step))
@@ -1020,7 +1051,7 @@ class RecentDots extends Control:
 		var offset := size.x - count * step
 		for i in count:
 			var result: String = recent[first + i]
-			var color := Color("3ecf8e") if result == "W" else (Color("e5484d") if result == "L" else Color("8a8fa8"))
+			var color := Color("3ecf8e") if result == "W" else (Color("e5484d") if result == "L" else Pal.muted)
 			draw_circle(Vector2(offset + i * step + step / 2.0, size.y / 2.0), 20.0, color)
 
 
@@ -1032,6 +1063,7 @@ class EdgeZone extends Control:
 	var label := ""
 	var hover_t := 0.0
 	var hovering := false
+	var top_dead := 0.0
 	const DWELL := 0.2
 
 	func _init() -> void:
@@ -1056,6 +1088,10 @@ class EdgeZone extends Control:
 		if before != hover_t:
 			queue_redraw()
 
+	## La esquina de arriba queda libre para el engranaje.
+	func _has_point(point: Vector2) -> bool:
+		return point.y >= top_dead
+
 	func _gui_input(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			hover_t = 0.0
@@ -1063,9 +1099,10 @@ class EdgeZone extends Control:
 
 	func _draw() -> void:
 		var f := clampf(hover_t / DWELL, 0.0, 1.0)
-		var edge_alpha := 0.35 + 0.35 * f
-		var outer := Color(0.0, 0.0, 0.0, edge_alpha)
-		var inner := Color(0.0, 0.0, 0.0, 0.0)
+		var edge_alpha := (0.35 + 0.35 * f) * (0.4 if Pal.light else 1.0)
+		var base := Pal.text if Pal.light else Color.BLACK
+		var outer := Color(base, edge_alpha * (0.5 if Pal.light else 1.0))
+		var inner := Color(base, 0.0)
 		var left_colors := PackedColorArray([outer, inner, inner, outer])
 		var points := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
 		if dir > 0:
@@ -1074,10 +1111,31 @@ class EdgeZone extends Control:
 		var mid := size.y / 2.0
 		var cx := size.x * 0.5
 		var alpha := 0.35 + 0.65 * f
-		var tint := Color(0.91, 0.92, 0.96, alpha)
+		var tint := Color(Pal.text, alpha)
 		var tip := Vector2(cx + dir * 14.0, mid)
 		draw_line(tip, tip + Vector2(dir * -26.0, -34.0), tint, 6.0, true)
 		draw_line(tip, tip + Vector2(dir * -26.0, 34.0), tint, 6.0, true)
 		var font := ThemeDB.fallback_font
 		var text_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
 		draw_string(font, Vector2(cx - text_w / 2.0, mid + 90.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, tint)
+
+
+## Engranaje chiquito dibujado a mano (sin imágenes).
+class GearButton extends Button:
+	func _init() -> void:
+		custom_minimum_size = Vector2(80, 80)
+		flat = true
+		focus_mode = Control.FOCUS_NONE
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		Fx.press_feedback(self)
+
+	func _draw() -> void:
+		var center := size / 2.0
+		var alpha := 1.0 if (is_hovered() or button_pressed) else 0.7
+		var tint := Color(Pal.text, alpha)
+		for i in 8:
+			var angle := TAU * i / 8.0
+			var dir := Vector2.from_angle(angle)
+			draw_line(center + dir * 20.0, center + dir * 31.0, tint, 9.0, true)
+		draw_arc(center, 19.0, 0.0, TAU, 40, tint, 7.0, true)
+		draw_circle(center, 7.0, tint)

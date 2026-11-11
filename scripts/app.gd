@@ -6,6 +6,7 @@ const GameScreen := preload("res://scripts/game_screen.gd")
 const NetClient := preload("res://scripts/net_client.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
+const Pal := preload("res://scripts/pal.gd")
 const Stats := preload("res://scripts/stats.gd")
 
 var profile := Profile.new()
@@ -29,6 +30,7 @@ func _ready() -> void:
 	get_window().size_changed.connect(_update_layout)
 	_update_layout()
 	profile.load_from_disk()
+	Pal.apply(profile.light_mode)
 	stats.load_from_disk()
 	net = NetClient.new()
 	add_child(net)
@@ -68,6 +70,10 @@ func show_menu(status: String = "") -> void:
 	menu = Menu.new()
 	menu.profile = profile
 	menu.stats = stats
+	menu.appearance_changed.connect(func() -> void:
+		Pal.apply(profile.light_mode)
+		show_menu()
+		menu.open_settings.call_deferred())
 	menu.local_requested.connect(_on_local_requested)
 	menu.online_requested.connect(_on_online_requested)
 	menu.cancel_requested.connect(_on_cancel_requested)
