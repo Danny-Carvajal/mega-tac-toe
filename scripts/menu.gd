@@ -4,6 +4,7 @@ extends Control
 ## flecha. La dirección del servidor vive en una cascada arriba a la derecha.
 
 signal appearance_changed
+signal history_requested
 signal local_requested
 signal online_requested(kind: String, code: String)
 signal cancel_requested
@@ -482,6 +483,12 @@ func _build_stats_page() -> void:
 	var dots := RecentDots.new()
 	dots.stats = stats
 	root.add_child(dots)
+
+	var history_button := _make_button("Historial de partidas", Pal.active)
+	history_button.pressed.connect(func() -> void:
+		if _taps_allowed():
+			history_requested.emit())
+	root.add_child(history_button)
 
 	var reset := _make_small_button("Borrar estadísticas")
 	reset.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1043,7 +1050,7 @@ class DonutChart extends Control:
 			queue_redraw()
 
 	func _init() -> void:
-		custom_minimum_size = Vector2(620, 620)
+		custom_minimum_size = Vector2(480, 480)
 
 	## Anima el barrido de la dona de cero a su valor.
 	func play() -> void:
@@ -1053,14 +1060,15 @@ class DonutChart extends Control:
 
 	func _draw() -> void:
 		var center := size / 2.0
-		var radius := 250.0
-		var width := 64.0
+		var k := size.x / 620.0
+		var radius := 250.0 * k
+		var width := 64.0 * k
 		draw_arc(center, radius, 0.0, TAU, 96, Pal.panel, width, true)
 		var total: int = stats.total()
 		var font := ThemeDB.fallback_font
 		if total == 0:
-			_text(font, "—", center + Vector2(0, 30), 140, Pal.muted)
-			_text(font, "Sin partidas todavía", center + Vector2(0, 100), 36, Pal.muted)
+			_text(font, "—", center + Vector2(0, 30 * k), int(140 * k), Pal.muted)
+			_text(font, "Sin partidas todavía", center + Vector2(0, 100 * k), int(36 * k), Pal.muted)
 			return
 		var parts := [[stats.wins, WIN], [stats.draws, DRAW], [stats.losses, LOSS]]
 		var visible_parts := 0
@@ -1079,8 +1087,8 @@ class DonutChart extends Control:
 				draw_arc(center, radius, a0, a1, maxi(8, int(span * 30.0)), part[1], width, true)
 			start += span
 		var shown := int(round(stats.win_rate() * sweep))
-		_text(font, "%d%%" % shown, center + Vector2(0, 30), 150, Pal.text)
-		_text(font, "de victorias", center + Vector2(0, 100), 40, Pal.muted)
+		_text(font, "%d%%" % shown, center + Vector2(0, 30 * k), int(150 * k), Pal.text)
+		_text(font, "de victorias", center + Vector2(0, 100 * k), int(40 * k), Pal.muted)
 
 	func _text(font: Font, text: String, anchor: Vector2, font_size: int, color: Color) -> void:
 		var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x

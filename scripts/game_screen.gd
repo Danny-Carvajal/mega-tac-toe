@@ -7,6 +7,7 @@ signal resign_requested
 signal exit_requested
 
 const Pal := preload("res://scripts/pal.gd")
+const History := preload("res://scripts/history.gd")
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
@@ -35,6 +36,19 @@ var _clock_received_ms := 0
 var _result_text := ""
 ## Fin de partida: cartel grande al medio (Ganaste / Perdiste / Empate) con "Ver tablero" y "Volver al menú".
 var result_layer: Control
+
+## Modo repetición: se ve una partida guardada, paso a paso o en vivo.
+var replay := false
+var replay_log: Array = []
+var replay_index := 0
+var replay_record := {}
+var replay_playing := false
+var replay_row: BoxContainer
+var replay_play_button: Button
+var _replay_next_ms := 0
+var _replay_mover := 0
+var _replay_skipped := false
+const REPLAY_STEP_MS := 900
 var _result_title := ""
 var _result_sub := ""
 var _result_color := Color.WHITE
@@ -105,6 +119,25 @@ func setup_local(profile: Profile) -> void:
 	names = ["", "X", "O"]
 
 
+## Repetición de una partida guardada (ver History.make_record).
+func setup_replay(record: Dictionary) -> void:
+	replay = true
+	online = false
+	replay_record = record
+	replay_log = History.decode(str(record.get("m", "")))
+	var recorded_names: Array = record.get("n", ["X", "O"])
+	names = ["", str(recorded_names[0]), str(recorded_names[1])]
+	colors = [Pal.muted, Profile.DEFAULT_X, Profile.DEFAULT_O]
+	var recorded_colors: Array = record.get("c", [])
+	if recorded_colors.size() == 2:
+		colors[1] = Color.html(str(recorded_colors[0]))
+		colors[2] = Color.html(str(recorded_colors[1]))
+	_resolve_color_clash()
+	arrow_tip_color = colors[1]
+	arrow_base_color = colors[2]
+	_result_shown = true  # en la repetición no sale el cartel de fin
+
+
 ## Juego online: `start` es el mensaje {t:"start"} del servidor.
 func setup_online(start: Dictionary, profile: Profile) -> void:
 	online = true
@@ -135,12 +168,21 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 
 func _ready() -> void:
 	_build_ui()
-	_refresh()
+	if replay:
+		replay_goto(0)
+	else:
+		_refresh()
 
 
 func _process(_delta: float) -> void:
 	if online:
 		_refresh_clocks()
+	if replay and replay_playing and Time.get_ticks_msec() >= _replay_next_ms:
+		if replay_index >= replay_log.size():
+			_set_replay_playing(false)
+		else:
+			replay_goto(replay_index + 1)
+			_replay_next_ms = Time.get_ticks_msec() + REPLAY_STEP_MS
 	if not _notice.is_empty() and Time.get_ticks_msec() > _notice_until_ms:
 		_notice = ""
 		_refresh_status()
@@ -337,7 +379,7 @@ func _build_ui() -> void:
 	margin.add_child(root)
 	root_box = root
 
-	if online:
+	if online or replay:
 		clock_row = BoxContainer.new()
 		clock_row.add_theme_constant_override("separation", 24)
 		root.add_child(clock_row)
@@ -365,6 +407,8 @@ func _build_ui() -> void:
 	ratio.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(ratio)
 	ratio_box = ratio
+	if replay:
+		_build_replay_row()
 
 	big_grid = GridContainer.new()
 	big_grid.columns = 3
@@ -381,11 +425,11 @@ func _build_ui() -> void:
 
 	bottom_row = BoxContainer.new()
 	root.add_child(bottom_row)
-	left_button = _make_button("Menú", Pal.cell)
+	left_button = _make_button("Volver al historial" if replay else "Menú", Pal.cell)
 	left_button.pressed.connect(_on_left_pressed)
 	bottom_row.add_child(left_button)
 
-	if not online:
+	if not online and not replay:
 		new_game_button = _make_button("Nueva partida", Pal.active)
 		new_game_button.pressed.connect(_on_new_game_pressed)
 		buttons.add_child(new_game_button)
@@ -426,7 +470,7 @@ func apply_layout(is_wide: bool) -> void:
 	wide = is_wide
 	if root_box == null:
 		return
-	for part in [clock_row, turn_banner, ratio_box, buttons_row, bottom_row, side_box, side_spacer]:
+	for part in [clock_row, turn_banner, ratio_box, replay_row, buttons_row, bottom_row, side_box, side_spacer]:
 		if part != null and part.get_parent() != null:
 			part.get_parent().remove_child(part)
 	if wide:
@@ -437,6 +481,8 @@ func apply_layout(is_wide: bool) -> void:
 			side_box.add_child(clock_row)
 		side_box.add_child(turn_banner)
 		side_box.add_child(side_spacer)
+		if replay_row != null:
+			side_box.add_child(replay_row)
 		side_box.add_child(buttons_row)
 		side_box.add_child(bottom_row)
 	else:
@@ -445,6 +491,8 @@ func apply_layout(is_wide: bool) -> void:
 			root_box.add_child(clock_row)
 		root_box.add_child(turn_banner)
 		root_box.add_child(ratio_box)
+		if replay_row != null:
+			root_box.add_child(replay_row)
 		root_box.add_child(buttons_row)
 		root_box.add_child(bottom_row)
 	if clock_row != null:
@@ -512,6 +560,8 @@ func _build_big_cell(parent: GridContainer, big: int) -> void:
 # --- Acciones del jugador ---------------------------------------------------
 
 func _on_small_pressed(big: int, small: int) -> void:
+	if replay:
+		return
 	if online:
 		# El servidor es quien decide: acá solo se pide la jugada.
 		if finished or game.current_player != my_seat or not game.is_legal(big, small):
@@ -718,6 +768,97 @@ func _apply_highlight() -> void:
 
 # --- Apuntes: flechas sobre el tablero -----------------------------------------
 
+# --- Repetición de partidas -------------------------------------------------
+
+func _build_replay_row() -> void:
+	replay_row = BoxContainer.new()
+	replay_row.add_theme_constant_override("separation", 14)
+	var specs := [["|<", "start"], ["<", "back"], ["Play", "play"], [">", "next"], [">|", "end"]]
+	for spec in specs:
+		var button := _make_button(spec[0], Pal.active if spec[1] == "play" else Pal.cell)
+		button.add_theme_font_size_override("font_size", 40)
+		var action: String = spec[1]
+		button.pressed.connect(func() -> void: _on_replay_button(action))
+		replay_row.add_child(button)
+		if action == "play":
+			replay_play_button = button
+
+
+func _on_replay_button(action: String) -> void:
+	match action:
+		"start":
+			_set_replay_playing(false)
+			replay_goto(0)
+		"back":
+			_set_replay_playing(false)
+			replay_goto(replay_index - 1)
+		"next":
+			_set_replay_playing(false)
+			replay_goto(replay_index + 1)
+		"end":
+			_set_replay_playing(false)
+			replay_goto(replay_log.size())
+		"play":
+			if replay_playing:
+				_set_replay_playing(false)
+			else:
+				if replay_index >= replay_log.size():
+					replay_goto(0)
+				_set_replay_playing(true)
+
+
+func _set_replay_playing(on: bool) -> void:
+	replay_playing = on
+	_replay_next_ms = Time.get_ticks_msec() + REPLAY_STEP_MS
+	if replay_play_button != null:
+		replay_play_button.text = "Pausa" if on else "Play"
+
+
+## Va a la posición `index` (cantidad de jugadas ya hechas) rearmando la partida desde cero.
+func replay_goto(index: int) -> void:
+	replay_index = clampi(index, 0, replay_log.size())
+	game = UltimateGame.new()
+	last_move = Vector2i(-1, -1)
+	last_move_player = 0
+	_replay_mover = 0
+	_replay_skipped = false
+	for i in replay_index:
+		var entry = replay_log[i]
+		_replay_mover = game.current_player
+		if entry is Array:
+			if game.play(int(entry[0]), int(entry[1])):
+				last_move = Vector2i(int(entry[0]), int(entry[1]))
+				last_move_player = _replay_mover
+			_replay_skipped = false
+		else:
+			game.skip_turn()
+			last_move = Vector2i(-1, -1)
+			_replay_skipped = true
+	_refresh()
+	if replay_index >= replay_log.size() and replay_playing:
+		_set_replay_playing(false)
+
+
+func _refresh_replay_status() -> void:
+	var total := replay_log.size()
+	var text: String
+	if replay_index == 0:
+		text = "Inicio · %d jugadas" % total
+		_style_banner(Pal.banner, false)
+		status_label.add_theme_color_override("font_color", Pal.text)
+	else:
+		if _replay_skipped:
+			text = "%d/%d · Salto de turno de %s" % [replay_index, total, names[_replay_mover]]
+		else:
+			text = "%d/%d · %s (%s)" % [replay_index, total, names[_replay_mover], _mark_text(_replay_mover)]
+		_style_banner(_mark_color(_replay_mover), true)
+		status_label.add_theme_color_override("font_color", Color.WHITE)
+	if replay_index >= total:
+		var winner := int(replay_record.get("w", 0))
+		text += "\n" + ("Empate" if winner == 0 else "Ganó %s" % names[winner])
+	status_label.text = text
+
+
 func _on_notes_toggled(on: bool) -> void:
 	notes_mode = on
 	clear_notes_button.visible = on
@@ -731,6 +872,14 @@ func clear_arrows() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if replay and event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_LEFT:
+				_on_replay_button("back")
+			KEY_RIGHT:
+				_on_replay_button("next")
+			KEY_SPACE:
+				_on_replay_button("play")
 	if not notes_mode or notes_layer == null or confirm_layer.visible or result_layer.visible:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -844,7 +993,7 @@ func _refresh() -> void:
 	if not finished:
 		for move in game.legal_moves():
 			legal[move] = true
-	var can_play := not finished and (not online or game.current_player == my_seat)
+	var can_play := not finished and not replay and (not online or game.current_player == my_seat)
 	# Tableros donde hay que jugar ahora (un tablero ganado sigue contando si le quedan casillas).
 	var playable_boards := {}
 	for move in legal:
@@ -891,6 +1040,9 @@ func _refresh() -> void:
 
 
 func _refresh_status() -> void:
+	if replay:
+		_refresh_replay_status()
+		return
 	if not _notice.is_empty() and not finished:
 		status_label.text = _notice
 		status_label.add_theme_color_override("font_color", Pal.text)
@@ -930,6 +1082,15 @@ func _refresh_status() -> void:
 
 
 func _refresh_clocks() -> void:
+	if replay and clock_labels[1] != null:
+		var winner := int(replay_record.get("w", 0))
+		for seat in [1, 2]:
+			var tag := "Empate" if winner == 0 else ("Ganó" if winner == seat else "Perdió")
+			var replay_label: Label = clock_labels[seat]
+			replay_label.text = "%s (%s)\n%s" % [names[seat], _mark_text(seat), tag]
+			replay_label.add_theme_color_override("font_color", colors[seat])
+			replay_label.modulate.a = 1.0 if (winner == 0 or winner == seat) else 0.55
+		return
 	if not online or clock_labels[1] == null:
 		return
 	var now := Time.get_ticks_msec()

@@ -79,3 +79,11 @@ builds nuevas se instalan encima de las anteriores. Para publicar en Play Store 
 - Partidas de 24 h por turno (asíncronas), que necesitan guardar partidas en disco/base de datos.
 - Reconexión si se cae la conexión a mitad de partida.
 - Cuentas, ranking y notificaciones.
+
+## Historial y repeticiones
+
+Las partidas online terminadas se guardan en el dispositivo (`scripts/history.gd`, `user://history.json`, máx. 300).
+Cada jugada ocupa 1 byte (`big * 9 + small`, 255 = salto de turno) y el registro completo va en base64, así una
+partida pesa ~60 caracteres más los nombres. Se abre desde Estadísticas > "Historial de partidas": muestra la lista y,
+al tocar una, la repetición (paso a paso, con Play en vivo, y con apuntes). Cuando haya cuentas, los mismos
+registros se pueden subir al servidor.

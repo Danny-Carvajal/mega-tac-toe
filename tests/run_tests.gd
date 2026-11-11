@@ -4,11 +4,13 @@ extends SceneTree
 
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const TurnClock := preload("res://scripts/turn_clock.gd")
+const History := preload("res://scripts/history.gd")
 
 var failures := 0
 
 
 func _init() -> void:
+	test_history_encoding()
 	test_first_move_is_free()
 	test_move_forces_next_board()
 	test_wrong_board_is_illegal()
@@ -205,3 +207,16 @@ func test_clock_expiry() -> void:
 	check(c.is_expired(30000), "se acaba el tiempo exacto")
 	c.stop(30000)
 	check(not c.is_expired(99999), "con el reloj detenido no vence")
+
+
+func test_history_encoding() -> void:
+	var log: Array = [[4, 4], [4, 0], [0, 8], "s", [8, 8]]
+	var text := History.encode(log)
+	check(History.decode(text) == log, "el historial guarda y recupera las jugadas (incluye saltos)")
+	var long_log: Array = []
+	for i in 40:
+		long_log.append([i % 9, (i * 4) % 9])
+	check(History.encode(long_log).length() <= 60, "una partida de 40 jugadas ocupa ~60 caracteres")
+	check(History.decode("") == [], "historial vacío")
+	var record := History.make_record(["Ana", "Beto"], ["#ff0000", "#0000ff"], 1, 1, "line", log)
+	check(record["n"] == ["Ana", "Beto"] and record["w"] == 1 and History.decode(record["m"]) == log, "el registro lleva nombres, ganador y jugadas")

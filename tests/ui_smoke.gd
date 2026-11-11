@@ -72,6 +72,35 @@ func _run() -> void:
 	check(payload["t"] == "restore" and payload["sid"] == "s1" and payload["log"] == [[4, 4]] and payload["seat"] == 1 and payload["token"] == "tok", "restore_payload lleva sid, registro y token")
 	rgs.free()
 
+	# Historial y repetición
+	var HistoryClass := preload("res://scripts/history.gd")
+	var record := HistoryClass.make_record(["Ana", "Beto"], ["#e5484d", "#3b82f6"], 1, 1, "line", [[4, 4], [4, 0], [0, 4], "s", [4, 8]])
+	var rp := GameScreen.new()
+	rp.setup_replay(record)
+	root.add_child(rp)
+	await process_frame
+	check(rp.replay_index == 0 and rp.game.get_cell(4, 4) == 0, "la repetición arranca en el inicio")
+	rp._on_replay_button("next")
+	check(rp.replay_index == 1 and rp.game.get_cell(4, 4) == 1, "paso adelante: aparece la primera jugada")
+	rp._on_replay_button("end")
+	check(rp.replay_index == 5 and rp.status_label.text.contains("Ganó Ana"), "al final dice quién ganó")
+	rp._on_replay_button("back")
+	check(rp.replay_index == 4 and rp.status_label.text.contains("Salto"), "paso atrás: se ve el salto de turno")
+	rp._on_small_pressed(0, 0)
+	check(rp.game.get_cell(0, 0) == 0, "en la repetición el tablero no se toca")
+	rp._on_replay_button("start")
+	rp._on_replay_button("play")
+	check(rp.replay_playing and rp.replay_play_button.text == "Pausa", "Play reproduce en vivo")
+	rp._set_replay_playing(false)
+	rp.free()
+	var hs := preload("res://scripts/history_screen.gd").new()
+	hs.history = HistoryClass.new()
+	hs.history.add(record)
+	root.add_child(hs)
+	await process_frame
+	check(hs.get_child_count() > 0, "la lista de historial se arma")
+	hs.free()
+
 	# Modo claro desde el pop up de ajustes
 	app.menu.theme_button.pressed.emit()
 	await create_timer(0.5).timeout

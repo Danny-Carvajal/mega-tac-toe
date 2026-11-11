@@ -8,9 +8,14 @@ const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Pal := preload("res://scripts/pal.gd")
 const Stats := preload("res://scripts/stats.gd")
+const History := preload("res://scripts/history.gd")
+const HistoryScreen := preload("res://scripts/history_screen.gd")
 
 var profile := Profile.new()
 var stats := Stats.new()
+var history := History.new()
+## Pantalla auxiliar abierta desde el menú: "" ninguna, "history" lista, "replay" repetición.
+var _view := ""
 var net: Node
 var current: Control
 var menu: Control
@@ -33,6 +38,7 @@ func _ready() -> void:
 	profile.load_from_disk()
 	Pal.apply(profile.light_mode)
 	stats.load_from_disk()
+	history.load_from_disk()
 	net = NetClient.new()
 	add_child(net)
 	net.connected.connect(_on_net_connected)
@@ -55,7 +61,11 @@ func _notification(what: int) -> void:
 		return
 	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
 		return
-	if game_screen == null:
+	if _view == "replay":
+		show_history()
+	elif _view == "history":
+		show_menu("", 2)
+	elif game_screen == null:
 		if menu == null or not menu.handle_back():
 			get_tree().quit()
 	elif not game_screen.online or game_screen.finished:
@@ -64,13 +74,15 @@ func _notification(what: int) -> void:
 		game_screen.ask_resign()
 
 
-func show_menu(status: String = "") -> void:
+func show_menu(status: String = "", page := 1) -> void:
 	game_screen = null
+	_view = ""
 	_token = ""
 	_reconnecting = false
 	menu = Menu.new()
 	menu.profile = profile
 	menu.stats = stats
+	menu.history_requested.connect(show_history)
 	menu.appearance_changed.connect(func() -> void:
 		Pal.apply(profile.light_mode)
 		show_menu()
@@ -79,6 +91,8 @@ func show_menu(status: String = "") -> void:
 	menu.online_requested.connect(_on_online_requested)
 	menu.cancel_requested.connect(_on_cancel_requested)
 	_show(menu)
+	if page != 1:
+		menu.set_page.call_deferred(page, false)
 	if not status.is_empty():
 		menu.set_status.call_deferred(status)
 
@@ -105,6 +119,29 @@ func _update_layout() -> void:
 		wide = is_wide
 		if current != null and current.has_method("apply_layout"):
 			current.apply_layout(wide)
+
+
+## Lista de partidas guardadas (se abre desde la pantalla de estadísticas).
+func show_history() -> void:
+	if menu != null and is_instance_valid(menu) and menu.cancel_button.visible:
+		_on_cancel_requested()  # si estaba buscando rival, se cancela antes de salir del menú
+	menu = null
+	game_screen = null
+	_view = "history"
+	var screen := HistoryScreen.new()
+	screen.history = history
+	screen.back_requested.connect(func() -> void: show_menu("", 2))
+	screen.game_selected.connect(show_replay)
+	_show(screen)
+
+
+func show_replay(record: Dictionary) -> void:
+	_view = "replay"
+	game_screen = null
+	var replay_screen := GameScreen.new()
+	replay_screen.setup_replay(record)
+	replay_screen.exit_requested.connect(show_history)
+	_show(replay_screen)
 
 
 func _on_local_requested() -> void:
@@ -173,16 +210,17 @@ func _on_net_message(data: Dictionary) -> void:
 	_probe_deadline_ms = 0
 	match str(data.get("t", "")):
 		"waiting":
-			if game_screen == null:
+			if game_screen == null and menu != null:
 				menu.set_status("")
 				menu.set_searching(true)
 		"room":
-			if game_screen == null:
+			if game_screen == null and menu != null:
 				menu.set_status("Sala %s. Pasale el código a tu rival." % data.get("code", ""))
 		"error":
 			if game_screen == null:
-				menu.set_busy(false)
-				menu.set_status(str(data.get("msg", "Error")))
+				if menu != null:
+					menu.set_busy(false)
+					menu.set_status(str(data.get("msg", "Error")))
 			else:
 				game_screen.show_notice(str(data.get("msg", "Error")))
 		"start":
@@ -268,3 +306,6 @@ func _record_result(data: Dictionary) -> void:
 	var result := "D" if winner == 0 else ("W" if winner == game_screen.my_seat else "L")
 	stats.record(result)
 	stats.save_to_disk()
+	history.add(History.make_record([game_screen.names[1], game_screen.names[2]], game_screen._start_colors,
+			game_screen.my_seat, winner, str(data.get("reason", "")), game_screen.move_log))
+	history.save_to_disk()
