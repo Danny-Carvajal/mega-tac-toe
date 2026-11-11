@@ -328,6 +328,8 @@ func test_ai_levels_get_stronger() -> void:
 # --- Cosméticos y cajas ------------------------------------------------------
 
 func test_cosmetics_catalog() -> void:
+	check(UltimateGame.winning_line([1, 1, 1, 0, 0, 0, 0, 0, 0], 1) == [0, 1, 2], "winning_line encuentra la línea ganadora")
+	check(UltimateGame.winning_line([1, 2, 1, 0, 0, 0, 0, 0, 0], 1).is_empty(), "winning_line devuelve vacío si no hay línea")
 	check(Cosmetics.items_of_kind("fx").size() == 17 and Cosmetics.items_of_kind("fo").size() == 17, "hay 17 figuras por lado")
 	var ids := {}
 	var unique := true

@@ -16,6 +16,7 @@ const Fx := preload("res://scripts/fx.gd")
 const UltimateAI := preload("res://scripts/ai.gd")
 const IntroScreen := preload("res://scripts/intro_screen.gd")
 const Cosmetics := preload("res://scripts/cosmetics.gd")
+const StrikeLine := preload("res://scripts/strike_line.gd")
 const FigureView := preload("res://scripts/figure_view.gd")
 
 ## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
@@ -127,6 +128,9 @@ const COLOR_LOSS := Color("e5484d")
 var new_game_button: Button
 var panels: Array[PanelContainer] = []
 var grids: Array[GridContainer] = []
+## Rayas sobre los 3 en línea: una por tablero chico y una para el tablero grande.
+var strikes: Array = []
+var big_strike: Control
 var result_labels: Array[Label] = []
 var result_figs: Array = []
 ## Cosméticos de quien está en cada asiento (índice 1 = X, 2 = O): {fx, fo, b, n}.
@@ -647,6 +651,10 @@ func _build_ui() -> void:
 	clear_notes_button.pressed.connect(clear_arrows)
 	buttons.add_child(clear_notes_button)
 
+	big_strike = StrikeLine.new()
+	big_strike.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(big_strike)
+
 	notes_layer = ArrowLayer.new()
 	notes_layer.screen = self
 	notes_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -760,6 +768,10 @@ func _build_big_cell(parent: GridContainer, big: int) -> void:
 	panel.add_child(result_fig)
 	result_fig.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	result_figs.append(result_fig)
+	var strike := StrikeLine.new()
+	panel.add_child(strike)
+	strike.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	strikes.append(strike)
 
 
 # --- Acciones del jugador ---------------------------------------------------
@@ -1261,6 +1273,9 @@ func _refresh() -> void:
 		if decided and _prev_results[big] == UltimateGame.NONE:
 			Fx.fade_in(result_fig, 0.35)
 			Fx.pop(result_fig, 0.4, 0.45)
+		_update_strike(big, board_result, not replay or _replay_animate)
+
+	_update_big_strike()
 
 	_prev_cells.assign(game.cells)
 	_prev_results.assign(game.board_results)
@@ -1273,6 +1288,38 @@ func _refresh() -> void:
 	_refresh_clocks()
 	_check_result_overlay()
 	_ai_maybe_start()
+
+
+## Raya sobre el 3 en línea de un tablero chico (si lo ganaron con línea; un empate no lleva).
+func _update_strike(big: int, board_result: int, animate: bool) -> void:
+	var strike: Control = strikes[big]
+	if board_result != UltimateGame.X and board_result != UltimateGame.O:
+		strike.hide_line()
+		return
+	var marks: Array = []
+	for small in 9:
+		marks.append(game.get_cell(big, small))
+	var line := UltimateGame.winning_line(marks, board_result)
+	if line.is_empty():
+		strike.hide_line()
+		return
+	var line_color := _mark_color(board_result).lightened(0.15)
+	strike.show_line(small_buttons[big][line[0]], small_buttons[big][line[2]], line_color, 12.0, "%d:%d:%d" % [line[0], line[2], board_result], animate)
+
+
+## Raya grande sobre los tres tableros con los que se ganó la partida.
+func _update_big_strike() -> void:
+	if big_strike == null:
+		return
+	if game.result != UltimateGame.X and game.result != UltimateGame.O:
+		big_strike.hide_line()
+		return
+	var line := UltimateGame.winning_line(game.board_results, game.result)
+	if line.is_empty():
+		big_strike.hide_line()
+		return
+	var line_color := _mark_color(game.result).lightened(0.15)
+	big_strike.show_line(panels[line[0]], panels[line[2]], line_color, 26.0, "%d:%d:%d" % [line[0], line[2], game.result], not replay or _replay_animate)
 
 
 func _refresh_status() -> void:

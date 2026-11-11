@@ -151,6 +151,14 @@ func _board_is_full(big: int) -> bool:
 	return true
 
 
+## Los tres índices de la línea que tiene `who` completa, o [] si no hay.
+static func winning_line(marks: Array, who: int) -> Array:
+	for line in LINES:
+		if marks[line[0]] == who and marks[line[1]] == who and marks[line[2]] == who:
+			return line
+	return []
+
+
 ## Gana quien tenga 3 en línea. DRAW (3) nunca cuenta como línea.
 static func _line_winner(marks: Array) -> int:
 	for line in LINES:
