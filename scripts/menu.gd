@@ -20,7 +20,9 @@ const COLOR_MUTED := Color("8a8fa8")
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
 const NAV_HEIGHT := 170.0
 ## En pantalla ancha las dos páginas van lado a lado, achicadas para que entren.
-const WIDE_SCALE := 0.58
+const WIDE_SCALES := [0.62, 0.9, 0.62]
+const WIDE_CONTENT_W := 1000.0
+const EDGE_W := 190.0
 const SWIPE_START_PX := 40.0
 const SWIPE_OPEN_FRACTION := 0.3
 const COLOR_WIN := Color("3ecf8e")
@@ -46,6 +48,8 @@ var cancel_button: Button
 var picker: ColorPicker
 var server_panel: PanelContainer
 var server_button: Button
+var private_button: Button
+var private_box: VBoxContainer
 var main_page: Control
 var colors_page: Control
 var stats_page: Control
@@ -56,6 +60,7 @@ var nav: NavBar
 var _action_buttons: Array[Button] = []
 var _chevrons: Array[Control] = []
 var _dividers: Array[ColorRect] = []
+var _edges: Array[EdgeZone] = []
 var _reset_armed := false
 var _swatch_x: Button
 var _swatch_o: Button
@@ -112,9 +117,8 @@ func set_colors_open(open: bool, animate := true) -> void:
 func set_page(index: int, animate := true) -> void:
 	page = clampi(index, 0, 2)
 	colors_open = page == 0
-	if wide:
-		return
 	server_panel.visible = false
+	_update_edges()
 	get_viewport().gui_release_focus()
 	if page == 2 and stats_donut != null:
 		stats_donut.play()
@@ -172,6 +176,13 @@ func _build_ui() -> void:
 	_build_colors_page()
 	_build_stats_page()
 	_build_server_panel()
+	for dir in [-1, 1]:
+		var edge := EdgeZone.new()
+		edge.dir = dir
+		edge.visible = false
+		edge.activated.connect(func() -> void: set_page(page + edge.dir))
+		add_child(edge)
+		_edges.append(edge)
 	_layout_pages.call_deferred()
 
 
@@ -181,6 +192,7 @@ func _page_root(page: Control) -> VBoxContainer:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 60)
 	page.add_child(margin)
+	page.set_meta("margin", margin)
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 28)
 	margin.add_child(root)
@@ -202,7 +214,7 @@ func _build_main_page() -> void:
 	var title := Label.new()
 	title.text = "Mega Tac Toe"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 96)
+	title.add_theme_font_size_override("font_size", 120)
 	title.add_theme_color_override("font_color", COLOR_TEXT)
 	root.add_child(title)
 
@@ -211,17 +223,52 @@ func _build_main_page() -> void:
 	name_edit.max_length = 16
 	root.add_child(name_edit)
 
-	var quick := _make_button("Partida rápida", COLOR_ACTIVE)
+	# Fila principal: Local (chico) - JUGAR (grande) - Privado (chico)
+	var play_row := HBoxContainer.new()
+	play_row.add_theme_constant_override("separation", 20)
+	root.add_child(play_row)
+
+	var local := _make_button("Local", COLOR_CELL)
+	local.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	local.size_flags_stretch_ratio = 1.0
+	local.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	local.custom_minimum_size = Vector2(0, 110)
+	local.add_theme_font_size_override("font_size", 38)
+	local.pressed.connect(func() -> void:
+		if not _taps_allowed():
+			return
+		_save_profile()
+		local_requested.emit())
+	play_row.add_child(local)
+
+	var quick := _make_button("JUGAR", COLOR_ACTIVE)
+	quick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quick.size_flags_stretch_ratio = 2.4
+	quick.custom_minimum_size = Vector2(0, 220)
+	quick.add_theme_font_size_override("font_size", 84)
 	quick.pressed.connect(func() -> void: _request("queue", ""))
-	root.add_child(quick)
+	play_row.add_child(quick)
 
-	var create := _make_button("Crear sala privada", COLOR_CELL)
+	private_button = _make_button("Privado", COLOR_CELL)
+	private_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	private_button.size_flags_stretch_ratio = 1.0
+	private_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	private_button.custom_minimum_size = Vector2(0, 110)
+	private_button.add_theme_font_size_override("font_size", 38)
+	private_button.pressed.connect(func() -> void: _set_private_open(not private_box.visible))
+	play_row.add_child(private_button)
+
+	# Sala privada: recién aparece al tocar "Privado".
+	private_box = VBoxContainer.new()
+	private_box.add_theme_constant_override("separation", 20)
+	private_box.visible = false
+	root.add_child(private_box)
+	var create := _make_button("Crear sala", COLOR_CELL)
 	create.pressed.connect(func() -> void: _request("create", ""))
-	root.add_child(create)
-
+	private_box.add_child(create)
 	var join_row := HBoxContainer.new()
 	join_row.add_theme_constant_override("separation", 24)
-	root.add_child(join_row)
+	private_box.add_child(join_row)
 	code_edit = _make_edit("", "Código")
 	code_edit.max_length = 4
 	code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -231,14 +278,6 @@ func _build_main_page() -> void:
 	join.custom_minimum_size = Vector2(360, 120)
 	join.pressed.connect(func() -> void: _request("join", code_edit.text.strip_edges().to_upper()))
 	join_row.add_child(join)
-
-	var local := _make_button("Jugar local (2 en el mismo cel)", COLOR_CELL)
-	local.pressed.connect(func() -> void:
-		if not _taps_allowed():
-			return
-		_save_profile()
-		local_requested.emit())
-	root.add_child(local)
 
 	status_label = Label.new()
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -422,6 +461,8 @@ func _build_stats_page() -> void:
 	_chevrons.append(back)
 	_anchor_chevron(back, false)
 	back.visible = not wide
+	if pager != null:
+		_layout_pages()
 
 
 func _stat_tile(label_text: String, value_text: String, color: Color, value_size := 72) -> PanelContainer:
@@ -522,42 +563,66 @@ func apply_layout(is_wide: bool) -> void:
 	pager.offset_bottom = 0.0 if wide else -NAV_HEIGHT
 	nav.visible = not wide
 	for divider in _dividers:
-		divider.visible = wide
-	if wide and stats_donut != null:
-		stats_donut.play()
+		divider.visible = false
+	for edge in _edges:
+		edge.visible = wide
 	for chevron in _chevrons:
 		chevron.visible = not wide
 	server_panel.visible = false
 	_layout_pages()
+	_update_edges()
 
 
 func _layout_pages() -> void:
 	var pages := [colors_page, main_page, stats_page]
-	if wide:
-		if _tween != null:
-			_tween.kill()
-		var third := Vector2(pager.size.x / 3.0, pager.size.y)
-		for i in 3:
-			var wide_page: Control = pages[i]
-			wide_page.scale = Vector2(WIDE_SCALE, WIDE_SCALE)
-			wide_page.size = third / WIDE_SCALE
-			wide_page.position = Vector2(third.x * i, 0.0)
-		for i in 2:
-			_dividers[i].position = Vector2(third.x * (i + 1) - 1.5, 80.0)
-			_dividers[i].size = Vector2(3.0, pager.size.y - 160.0)
-		return
-	for page_control in pages:
-		page_control.scale = Vector2.ONE
-		page_control.size = pager.size
+	for i in 3:
+		var page_control: Control = pages[i]
+		var page_scale := 1.0
+		if wide:
+			page_scale = WIDE_SCALES[i]
+		page_control.scale = Vector2(page_scale, page_scale)
+		page_control.size = pager.size / page_scale
+		var margin: MarginContainer = page_control.get_meta("margin")
+		var side := 60
+		if wide:
+			side = maxi(60, int((page_control.size.x - WIDE_CONTENT_W) / 2.0))
+		margin.add_theme_constant_override("margin_left", side)
+		margin.add_theme_constant_override("margin_right", side)
+		var vertical := 40 if wide else 60
+		margin.add_theme_constant_override("margin_top", vertical)
+		margin.add_theme_constant_override("margin_bottom", vertical)
+	_layout_edges()
 	if _tween == null or not _tween.is_running():
 		_set_page_f(float(page))
 	else:
 		_set_page_f(_page_f)
 
 
+func _set_private_open(open: bool) -> void:
+	private_box.visible = open
+	_style_button(private_button, COLOR_ACTIVE if open else COLOR_CELL)
+	if open:
+		Fx.pop(private_box, 0.9, 0.2)
+
+
+func _layout_edges() -> void:
+	for edge in _edges:
+		edge.size = Vector2(EDGE_W, pager.size.y)
+		edge.position = Vector2(0.0 if edge.dir < 0 else size.x - EDGE_W, 0.0)
+
+
+## Los costados de compu: se ven solo si hay página en esa dirección.
+func _update_edges() -> void:
+	var names := ["Colores", "Jugar", "Estadísticas"]
+	for edge in _edges:
+		var target: int = page + edge.dir
+		edge.visible = wide and target >= 0 and target <= 2
+		if edge.visible:
+			edge.label = names[target]
+			edge.queue_redraw()
+
+
 func _set_page_f(f: float) -> void:
-	if wide:
-		return
 	_page_f = clampf(f, 0.0, 2.0)
 	var width := pager.size.x
 	colors_page.position.x = (0.0 - _page_f) * width
@@ -957,3 +1022,62 @@ class RecentDots extends Control:
 			var result: String = recent[first + i]
 			var color := Color("3ecf8e") if result == "W" else (Color("e5484d") if result == "L" else Color("8a8fa8"))
 			draw_circle(Vector2(offset + i * step + step / 2.0, size.y / 2.0), 20.0, color)
+
+
+## Zona del borde para compu: al pasar el mouse un momento cambia de pantalla.
+class EdgeZone extends Control:
+	signal activated
+
+	var dir := -1
+	var label := ""
+	var hover_t := 0.0
+	var hovering := false
+	const DWELL := 0.45
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		mouse_entered.connect(func() -> void: hovering = true)
+		mouse_exited.connect(func() -> void: hovering = false)
+
+	func _process(delta: float) -> void:
+		if not visible:
+			hover_t = 0.0
+			return
+		var before := hover_t
+		if hovering:
+			hover_t += delta
+			if hover_t >= DWELL:
+				hover_t = 0.0
+				hovering = false
+				activated.emit()
+		else:
+			hover_t = maxf(0.0, hover_t - delta * 3.0)
+		if before != hover_t:
+			queue_redraw()
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			hover_t = 0.0
+			activated.emit()
+
+	func _draw() -> void:
+		var f := clampf(hover_t / DWELL, 0.0, 1.0)
+		var edge_alpha := 0.10 + 0.30 * f
+		var outer := Color(0.9, 0.92, 1.0, edge_alpha)
+		var inner := Color(0.9, 0.92, 1.0, 0.0)
+		var left_colors := PackedColorArray([outer, inner, inner, outer])
+		var points := PackedVector2Array([Vector2(0, 0), Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(0, size.y)])
+		if dir > 0:
+			left_colors = PackedColorArray([inner, outer, outer, inner])
+		draw_polygon(points, left_colors)
+		var mid := size.y / 2.0
+		var cx := size.x * 0.5
+		var alpha := 0.35 + 0.65 * f
+		var tint := Color(0.91, 0.92, 0.96, alpha)
+		var tip := Vector2(cx + dir * 14.0, mid)
+		draw_line(tip, tip + Vector2(dir * -26.0, -34.0), tint, 6.0, true)
+		draw_line(tip, tip + Vector2(dir * -26.0, 34.0), tint, 6.0, true)
+		var font := ThemeDB.fallback_font
+		var text_w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
+		draw_string(font, Vector2(cx - text_w / 2.0, mid + 90.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, tint)

@@ -77,6 +77,10 @@ var confirm_layer: Control
 var status_label: Label
 var clock_labels: Array = [null, null, null]
 var left_button: Button
+var bottom_row: BoxContainer
+var turn_banner: PanelContainer
+var _last_banner_key := ""
+const COLOR_RESIGN := Color("a8323a")
 var new_game_button: Button
 var panels: Array[PanelContainer] = []
 var grids: Array[GridContainer] = []
@@ -301,7 +305,10 @@ func _build_ui() -> void:
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 52)
-	root.add_child(status_label)
+	turn_banner = PanelContainer.new()
+	turn_banner.add_child(status_label)
+	_style_banner(Color("3a3f5c"), false)
+	root.add_child(turn_banner)
 
 	var ratio := AspectRatioContainer.new()
 	ratio.ratio = 1.0
@@ -323,9 +330,11 @@ func _build_ui() -> void:
 	root.add_child(buttons)
 	buttons_row = buttons
 
+	bottom_row = BoxContainer.new()
+	root.add_child(bottom_row)
 	left_button = _make_button("Menú", COLOR_CELL)
 	left_button.pressed.connect(_on_left_pressed)
-	buttons.add_child(left_button)
+	bottom_row.add_child(left_button)
 
 	if not online:
 		new_game_button = _make_button("Nueva partida", COLOR_ACTIVE)
@@ -336,6 +345,8 @@ func _build_ui() -> void:
 	notes_button.toggle_mode = true
 	notes_button.add_theme_stylebox_override("pressed", _flat(Color("3b6f8f")))
 	notes_button.add_theme_stylebox_override("hover_pressed", _flat(Color("3b6f8f")))
+	for font_state in ["font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
+		notes_button.add_theme_color_override(font_state, COLOR_TEXT)
 	notes_button.toggled.connect(_on_notes_toggled)
 	buttons.add_child(notes_button)
 	clear_notes_button = _make_button("Borrar", COLOR_CELL)
@@ -365,7 +376,7 @@ func apply_layout(is_wide: bool) -> void:
 	wide = is_wide
 	if root_box == null:
 		return
-	for part in [clock_row, status_label, ratio_box, buttons_row, side_box, side_spacer]:
+	for part in [clock_row, turn_banner, ratio_box, buttons_row, bottom_row, side_box, side_spacer]:
 		if part != null and part.get_parent() != null:
 			part.get_parent().remove_child(part)
 	if wide:
@@ -374,19 +385,22 @@ func apply_layout(is_wide: bool) -> void:
 		root_box.add_child(side_box)
 		if clock_row != null:
 			side_box.add_child(clock_row)
-		side_box.add_child(status_label)
+		side_box.add_child(turn_banner)
 		side_box.add_child(side_spacer)
 		side_box.add_child(buttons_row)
+		side_box.add_child(bottom_row)
 	else:
 		root_box.vertical = true
 		if clock_row != null:
 			root_box.add_child(clock_row)
-		root_box.add_child(status_label)
+		root_box.add_child(turn_banner)
 		root_box.add_child(ratio_box)
 		root_box.add_child(buttons_row)
+		root_box.add_child(bottom_row)
 	if clock_row != null:
 		clock_row.vertical = wide
 	buttons_row.vertical = wide
+	bottom_row.vertical = wide
 	if notes_layer != null:
 		notes_layer.queue_redraw.call_deferred()
 
@@ -398,7 +412,8 @@ func _make_button(text: String, color: Color) -> Button:
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.custom_minimum_size = Vector2(0, 120)
 	button.add_theme_font_size_override("font_size", 44)
-	button.add_theme_color_override("font_color", COLOR_TEXT)
+	for font_state in ["font_color", "font_pressed_color", "font_hover_pressed_color", "font_hover_color", "font_focus_color"]:
+		button.add_theme_color_override(font_state, COLOR_TEXT)
 	_style_button(button, color)
 	return button
 
@@ -734,6 +749,7 @@ func _refresh() -> void:
 
 	if online:
 		left_button.text = "Volver al menú" if finished else "Rendirse"
+		_style_button(left_button, COLOR_CELL if finished else COLOR_RESIGN)
 	_refresh_status()
 	_refresh_clocks()
 
@@ -742,18 +758,22 @@ func _refresh_status() -> void:
 	if not _notice.is_empty() and not finished:
 		status_label.text = _notice
 		status_label.add_theme_color_override("font_color", Color("ffd24d"))
+		_style_banner(Color("3a3f5c"), false)
 		return
 	if finished and online:
 		status_label.text = _result_text
 		status_label.add_theme_color_override("font_color", COLOR_TEXT)
+		_style_banner(Color("3a3f5c"), false)
 		return
 	if game.is_over():
 		if game.result == UltimateGame.DRAW:
 			status_label.text = "Empate"
 			status_label.add_theme_color_override("font_color", COLOR_DRAW)
+			_style_banner(COLOR_DRAW, false)
 		else:
 			status_label.text = "Ganó %s" % _mark_text(game.result)
 			status_label.add_theme_color_override("font_color", _mark_color(game.result))
+			_style_banner(_mark_color(game.result), true)
 		return
 
 	var text: String
@@ -764,7 +784,13 @@ func _refresh_status() -> void:
 	if game.forced_board == -1 and (not online or game.current_player == my_seat):
 		text += " - elegí cualquier tablero"
 	status_label.text = text
-	status_label.add_theme_color_override("font_color", _mark_color(game.current_player))
+	status_label.add_theme_color_override("font_color", COLOR_TEXT if (not online or game.current_player == my_seat) else _mark_color(game.current_player))
+	var mine := not online or game.current_player == my_seat
+	_style_banner(_mark_color(game.current_player), mine)
+	var key := "%d:%d" % [game.current_player, game.cells.count(UltimateGame.NONE)]
+	if key != _last_banner_key:
+		_last_banner_key = key
+		Fx.pop(turn_banner, 0.92, 0.25)
 
 
 func _refresh_clocks() -> void:
@@ -783,6 +809,23 @@ func _refresh_clocks() -> void:
 			label.text += "\nSaltos %d/%d" % [skips[seat], max_skips]
 		label.add_theme_color_override("font_color", colors[seat])
 		label.modulate.a = 1.0 if running else 0.5
+
+
+## Cartel del turno: relleno fuerte con el color del jugador cuando te toca, tenue cuando espera.
+func _style_banner(color: Color, solid: bool) -> void:
+	if turn_banner == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = color.darkened(0.15) if solid else Color(color, 0.16)
+	style.border_color = color
+	style.set_border_width_all(6 if solid else 3)
+	style.set_corner_radius_all(22)
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 18
+	style.content_margin_bottom = 18
+	turn_banner.add_theme_stylebox_override("panel", style)
+	turn_banner.pivot_offset = turn_banner.size / 2.0
 
 
 func _mark_text(mark: int) -> String:

@@ -68,7 +68,18 @@ func _run() -> void:
 	app.menu.apply_layout(true)
 	await process_frame
 	check(not app.menu.nav.visible, "en compu no hay barra de pestañas")
-	check(app.menu.colors_page.position.x == 0.0 and app.menu.main_page.position.x > 0.0 and app.menu.stats_page.position.x > app.menu.main_page.position.x, "en compu colores, menú y estadísticas van lado a lado")
+	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x < 0.0 and app.menu.stats_page.position.x > 0.0, "en compu se ve una sola página, las otras a los costados")
+	check(app.menu._edges[0].visible and app.menu._edges[1].visible and app.menu._edges[0].label == "Colores" and app.menu._edges[1].label == "Estadísticas", "en compu hay zonas de hover a los costados")
+	app.menu._edges[1].activated.emit()
+	await create_timer(0.5).timeout
+	check(app.menu.page == 2 and app.menu.stats_page.position.x == 0.0 and not app.menu._edges[1].visible, "hover a la derecha abre estadísticas")
+	app.menu._edges[0].activated.emit()
+	await create_timer(0.3).timeout
+	check(app.menu.page == 1, "hover a la izquierda vuelve al menú")
+	check(not app.menu.private_box.visible, "las opciones de sala privada están ocultas al inicio")
+	app.menu._set_private_open(true)
+	check(app.menu.private_box.visible, "Privado muestra crear sala y código")
+	app.menu._set_private_open(false)
 	check(app.menu.colors_page.position.x + app.menu.colors_page.size.x * app.menu.colors_page.scale.x <= app.menu.pager.size.x + 1.0, "la página de colores cabe en pantalla")
 	app.menu.apply_layout(false)
 	await process_frame
@@ -89,9 +100,9 @@ func _run() -> void:
 	await process_frame
 	check(local.small_buttons.size() == 9 and local.small_buttons[0].size() == 9, "9 tableros de 9 casillas")
 	local.apply_layout(true)
-	check(local.status_label.get_parent() == local.side_box and local.buttons_row.vertical, "en compu el estado y los botones van a la derecha")
+	check(local.turn_banner.get_parent() == local.side_box and local.buttons_row.vertical, "en compu el estado y los botones van a la derecha")
 	local.apply_layout(false)
-	check(local.status_label.get_parent() == local.root_box and not local.buttons_row.vertical, "en vertical todo vuelve a la columna")
+	check(local.turn_banner.get_parent() == local.root_box and not local.buttons_row.vertical, "en vertical todo vuelve a la columna")
 	local._on_small_pressed(4, 2)
 	check(local.small_buttons[4][2].text == "X", "la casilla jugada muestra X")
 	check(not local.small_buttons[2][0].disabled, "el tablero forzado queda jugable")
