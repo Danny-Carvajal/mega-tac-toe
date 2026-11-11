@@ -72,14 +72,14 @@ jobs:
         run: |
           mkdir -p build
           godot --headless --path . --import || true
-          godot --headless --path . --export-debug "Android" build/mega-tic-toe.apk
+          godot --headless --path . --export-debug "Android" build/mega-tac-toe.apk
           ls -la build
 
       - name: Guardar el APK como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: mega-tic-toe-apk
-          path: build/mega-tic-toe.apk
+          name: mega-tac-toe-apk
+          path: build/mega-tac-toe.apk
 
       - name: Publicar en Releases (etiqueta "latest")
         uses: softprops/action-gh-release@v2
@@ -88,4 +88,4 @@ jobs:
           name: Última build (Android)
           prerelease: true
           body: "APK de debug generado automáticamente desde main. Instalalo en el cel (hay que permitir apps de orígenes desconocidos)."
-          files: build/mega-tic-toe.apk
+          files: build/mega-tac-toe.apk

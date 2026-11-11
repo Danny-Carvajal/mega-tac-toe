@@ -59,7 +59,7 @@ func _build_ui() -> void:
 	margin.add_child(root)
 
 	var title := Label.new()
-	title.text = "Mega Tic Toe"
+	title.text = "Mega Tac Toe"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 96)
 	title.add_theme_color_override("font_color", COLOR_TEXT)

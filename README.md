@@ -1,4 +1,4 @@
-# Mega Tic Toe
+# Mega Tac Toe
 
 Ultimate Tic Tac Toe hecho en Godot 4, pensado para móvil y web, con partidas online.
 
@@ -51,15 +51,15 @@ El plan gratis de Render no pide tarjeta, soporta WebSocket y da TLS (`wss://`).
 sin tráfico y tarda cerca de 1 min en despertar.
 
 1. En render.com: New > Blueprint, conectar este repo (usa `render.yaml` y el `Dockerfile`).
-2. Cuando termine, copiar la URL (`https://mega-tic-toe-server.onrender.com`).
-3. En el menú del juego, en "Servidor", poner `wss://mega-tic-toe-server.onrender.com`.
+2. Cuando termine, copiar la URL (`https://mega-tac-toe-server.onrender.com`).
+3. En el menú del juego, en "Servidor", poner `wss://mega-tac-toe-server.onrender.com`.
 
 ## Android
 
 Cada push a `main` que toque el juego compila un APK en GitHub Actions y lo publica en
-[Releases](https://github.com/Danny-Carvajal/mega-tic-toe/releases/tag/latest) (etiqueta `latest`).
+[Releases](https://github.com/Danny-Carvajal/mega-tac-toe/releases/tag/latest) (etiqueta `latest`).
 
-1. Abrir ese link desde el cel y bajar `mega-tic-toe.apk`.
+1. Abrir ese link desde el cel y bajar `mega-tac-toe.apk`.
 2. Abrirlo y permitir "instalar apps de orígenes desconocidos" cuando lo pida.
 3. Para jugar online, poner la dirección del servidor en el campo "Servidor" del menú.
 

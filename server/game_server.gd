@@ -1,5 +1,5 @@
 extends Node
-## Servidor autoritativo de Mega Tic Toe. Habla JSON por WebSocket (sin TLS: en
+## Servidor autoritativo de Mega Tac Toe. Habla JSON por WebSocket (sin TLS: en
 ## producción va detrás de un proxy que ponga wss://). Reutiliza la misma lógica
 ## de juego y el mismo reloj que el cliente, así hay una sola fuente de verdad.
 ##
@@ -73,7 +73,7 @@ func _ready() -> void:
 		push_error("No pude abrir el puerto %d (error %d)" % [port, err])
 		get_tree().quit(1)
 		return
-	print("Mega Tic Toe server escuchando en el puerto %d (banco %dms, +%dms)" % [port, initial_ms, increment_ms])
+	print("Mega Tac Toe server escuchando en el puerto %d (banco %dms, +%dms)" % [port, initial_ms, increment_ms])
 
 
 func _parse_args() -> void:

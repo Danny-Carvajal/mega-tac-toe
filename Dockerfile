@@ -1,4 +1,4 @@
-# Servidor de Mega Tic Toe: Godot en modo headless.
+# Servidor de Mega Tac Toe: Godot en modo headless.
 FROM debian:bookworm-slim
 
 ARG GODOT_VERSION=4.3

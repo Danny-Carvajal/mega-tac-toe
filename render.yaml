@@ -1,7 +1,7 @@
 # Blueprint de Render para el servidor (plan gratis, sin tarjeta).
 services:
   - type: web
-    name: mega-tic-toe-server
+    name: mega-tac-toe-server
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
