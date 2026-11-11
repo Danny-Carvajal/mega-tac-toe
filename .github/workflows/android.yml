@@ -1,7 +1,7 @@
 name: Android APK
 
 # Compila el APK en la nube de GitHub (gratis en repos públicos) y lo publica en
-# la sección Releases con la etiqueta "latest". Se dispara con cada push a main
+# la sección Releases (un release nuevo por build, así Obtainium detecta las versiones). Se dispara con cada push a main
 # que toque el juego, o a mano desde la pestaña Actions.
 on:
   push:
@@ -81,11 +81,21 @@ jobs:
           name: mega-tac-toe-apk
           path: build/mega-tac-toe.apk
 
-      - name: Publicar en Releases (etiqueta "latest")
+      - name: Publicar en Releases (una etiqueta nueva por build)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Última build (Android)
-          prerelease: true
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }} (Android)
+          make_latest: true
           body: "APK de debug generado automáticamente desde main. Instalalo en el cel (hay que permitir apps de orígenes desconocidos)."
           files: build/mega-tac-toe.apk
+
+      - name: Borrar releases viejos (deja los últimos 3)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[3:] | .[].tagName' |
+          while read -r tag; do
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          done

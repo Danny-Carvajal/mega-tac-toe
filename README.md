@@ -64,7 +64,7 @@ sin tráfico y tarda cerca de 1 min en despertar.
 ## Android
 
 Cada push a `main` que toque el juego compila un APK en GitHub Actions y lo publica en
-[Releases](https://github.com/Danny-Carvajal/mega-tac-toe/releases/tag/latest) (etiqueta `latest`).
+[Releases](https://github.com/Danny-Carvajal/mega-tac-toe/releases/latest) (un release nuevo por build, `build-N`).
 
 1. Abrir ese link desde el cel y bajar `mega-tac-toe.apk`.
 2. Abrirlo y permitir "instalar apps de orígenes desconocidos" cuando lo pida.
