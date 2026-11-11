@@ -174,7 +174,8 @@ func _on_net_message(data: Dictionary) -> void:
 	match str(data.get("t", "")):
 		"waiting":
 			if game_screen == null:
-				menu.set_status("Buscando rival...")
+				menu.set_status("")
+				menu.set_searching(true)
 		"room":
 			if game_screen == null:
 				menu.set_status("Sala %s. Pasale el código a tu rival." % data.get("code", ""))

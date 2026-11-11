@@ -55,8 +55,12 @@ func _run() -> void:
 	# Buscando rival: el botón Cancelar tiene que estar habilitado y volver al estado normal
 	app.menu.set_busy(true)
 	check(app.menu.cancel_button.visible and not app.menu.cancel_button.disabled, "buscando rival: Cancelar está habilitado")
+	app.menu.set_searching(true)
+	await create_timer(0.5).timeout
+	check(app.menu.search_box.visible and not app.menu.status_label.visible and app.menu.search_dots.text.length() >= 1, "buscando rival: puntitos y tiempo visibles")
+	check(app.menu.search_timer.text.strip_edges().begins_with("0:0"), "buscando rival: el tiempo en cola corre")
 	app.menu.cancel_button.pressed.emit()
-	check(not app.menu.cancel_button.visible and not app.menu._action_buttons[0].disabled, "Cancelar vuelve el menú a la normalidad")
+	check(not app.menu.cancel_button.visible and not app.menu._action_buttons[0].disabled and not app.menu.search_box.visible, "Cancelar vuelve el menú a la normalidad")
 
 	# Restore: el cliente arma lo que sabe de la partida
 	var rgs := GameScreen.new()

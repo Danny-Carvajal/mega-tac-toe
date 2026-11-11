@@ -42,6 +42,11 @@ var code_edit: LineEdit
 var url_edit: LineEdit
 var status_label: Label
 var cancel_button: Button
+var search_box: HBoxContainer
+var search_dots: Label
+var search_timer: Label
+var searching := false
+var _search_started_ms := 0
 var picker: ColorPicker
 var server_panel: PanelContainer
 var server_button: Button
@@ -90,10 +95,31 @@ func set_status(text: String) -> void:
 	status_label.text = text
 
 
+## Muestra "Buscando rival..." con puntitos animados y el tiempo que lleva en cola.
+func set_searching(on: bool) -> void:
+	if on == searching:
+		return
+	searching = on
+	search_box.visible = on
+	status_label.visible = not on
+	if on:
+		_search_started_ms = Time.get_ticks_msec()
+		_update_search()
+
+
+func _update_search() -> void:
+	var ms := Time.get_ticks_msec() - _search_started_ms
+	var elapsed := ms / 1000
+	search_dots.text = ".".repeat((ms / 400) % 3 + 1)
+	search_timer.text = "  %d:%02d" % [elapsed / 60, elapsed % 60]
+
+
 func set_busy(busy: bool) -> void:
 	for button in _action_buttons:
 		button.disabled = busy
 	cancel_button.visible = busy
+	if not busy:
+		set_searching(false)
 	cancel_button.disabled = false  # es de las "acciones", pero justo este tiene que seguir andando
 	if busy:
 		server_panel.visible = false
@@ -292,6 +318,27 @@ func _build_main_page() -> void:
 	status_label.add_theme_font_size_override("font_size", 40)
 	status_label.add_theme_color_override("font_color", Pal.text)
 	root.add_child(status_label)
+
+	# "Buscando rival" + puntitos animados + tiempo en cola, todo como un solo bloque centrado.
+	search_box = HBoxContainer.new()
+	search_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	search_box.add_theme_constant_override("separation", 0)
+	search_box.visible = false
+	root.add_child(search_box)
+	var search_title := Label.new()
+	search_title.text = "Buscando rival"
+	search_box.add_child(search_title)
+	search_dots = Label.new()
+	search_box.add_child(search_dots)
+	search_timer = Label.new()
+	search_box.add_child(search_timer)
+	for label in [search_title, search_dots, search_timer]:
+		label.add_theme_font_size_override("font_size", 40)
+		label.add_theme_color_override("font_color", Pal.text)
+	search_dots.custom_minimum_size = Vector2(60, 0)  # ancho fijo: los puntitos no mueven el resto
+	search_timer.custom_minimum_size = Vector2(150, 0)
+	search_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	search_timer.add_theme_color_override("font_color", Pal.muted)
 
 	cancel_button = _make_button("Cancelar", Pal.cell)
 	cancel_button.visible = false
@@ -629,6 +676,8 @@ func _set_private_open(open: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	if searching:
+		_update_search()
 	if wide and pager != null:
 		edge_tick(delta, get_viewport().get_mouse_position())
 
