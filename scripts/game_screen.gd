@@ -335,6 +335,7 @@ func _build_ui() -> void:
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.add_theme_font_size_override("font_size", 52)
 	turn_banner = PanelContainer.new()
+	turn_banner.custom_minimum_size = Vector2(0, 170)  # alto fijo (2 líneas): el tablero no cambia de tamaño al cambiar el texto
 	turn_banner.add_child(status_label)
 	_style_banner(Pal.banner, false)
 	root.add_child(turn_banner)
@@ -616,8 +617,6 @@ func _on_notes_toggled(on: bool) -> void:
 	clear_notes_button.visible = on
 	_drag_from = Vector2i(-1, -1)
 	notes_layer.queue_redraw()
-	if on:
-		show_notice("Apuntes: arrastrá sobre el tablero para dibujar una flecha", 3000)
 
 
 func clear_arrows() -> void:
@@ -787,7 +786,7 @@ func _refresh() -> void:
 func _refresh_status() -> void:
 	if not _notice.is_empty() and not finished:
 		status_label.text = _notice
-		status_label.add_theme_color_override("font_color", Pal.notice)
+		status_label.add_theme_color_override("font_color", Pal.text)
 		_style_banner(Pal.banner, false)
 		return
 	if finished and online:

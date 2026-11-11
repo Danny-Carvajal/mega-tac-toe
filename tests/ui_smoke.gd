@@ -178,7 +178,11 @@ func _run() -> void:
 	check(fx._highlighted == Vector2i(4, 2), "se resalta la última jugada")
 	fx._on_small_pressed(2, 5)
 	check(fx._highlighted == Vector2i(2, 5), "el resaltado sigue a la última jugada")
+	var grid_before: Vector2 = fx.big_grid.size
 	fx.notes_button.button_pressed = true
+	await process_frame
+	await process_frame
+	check(fx.big_grid.size == grid_before, "activar apuntes no cambia el tamaño del tablero")
 	check(fx.notes_mode and fx.clear_notes_button.visible, "el toggle de apuntes activa el modo y muestra Borrar")
 	fx._toggle_arrow(Vector2i(0, 0), Vector2i(4, 4))
 	check(fx.arrows.size() == 1, "se agrega una flecha")
