@@ -16,7 +16,7 @@ const COLOR_ACTIVE := Color("3d4a7a")
 const COLOR_CELL := Color("2d3048")
 const COLOR_DRAW := Color("8a8fa8")
 const COLOR_TEXT := Color("e8eaf6")
-const ARROW_COLOR := Color(0.22, 0.74, 0.97, 0.55)
+const ARROW_ALPHA := 0.7
 
 var game := UltimateGame.new()
 var online := false
@@ -56,6 +56,9 @@ var _prev_results: Array[int] = []
 ## Apuntes: flechas semitransparentes que el jugador dibuja arrastrando sobre el tablero.
 var notes_mode := false
 var arrows: Array[Dictionary] = []
+## Las flechas van en degradé: la base con el color de la O y la punta con el de la X del jugador.
+var arrow_base_color := Profile.DEFAULT_O
+var arrow_tip_color := Profile.DEFAULT_X
 var notes_button: Button
 var clear_notes_button: Button
 var notes_layer: Control
@@ -80,6 +83,8 @@ var small_buttons: Array = []
 ## Juego local: los dos jugadores comparten el cel, sin reloj.
 func setup_local(profile: Profile) -> void:
 	online = false
+	arrow_tip_color = profile.color_x
+	arrow_base_color = profile.color_o
 	colors = [COLOR_DRAW, profile.color_x, profile.color_o]
 	names = ["", "X", "O"]
 
@@ -87,6 +92,8 @@ func setup_local(profile: Profile) -> void:
 ## Juego online: `start` es el mensaje {t:"start"} del servidor.
 func setup_online(start: Dictionary, profile: Profile) -> void:
 	online = true
+	arrow_tip_color = profile.color_x
+	arrow_base_color = profile.color_o
 	my_seat = int(start.get("you", 0))
 	var server_names: Array = start.get("names", ["X", "O"])
 	var server_colors: Array = start.get("colors", [])
@@ -588,14 +595,12 @@ func _cell_at(point: Vector2) -> Vector2i:
 func draw_arrows_on(layer: Control) -> void:
 	var inverse := layer.get_global_transform().affine_inverse()
 	for arrow in arrows:
-		_draw_arrow(layer, inverse * _cell_center(arrow["from"]), inverse * _cell_center(arrow["to"]), ARROW_COLOR)
+		_draw_arrow(layer, inverse * _cell_center(arrow["from"]), inverse * _cell_center(arrow["to"]), ARROW_ALPHA)
 	if _drag_from.x >= 0:
-		var preview := ARROW_COLOR
-		preview.a *= 0.6
-		_draw_arrow(layer, inverse * _cell_center(_drag_from), inverse * _drag_point, preview)
+		_draw_arrow(layer, inverse * _cell_center(_drag_from), inverse * _drag_point, ARROW_ALPHA * 0.6)
 
 
-func _draw_arrow(layer: Control, from: Vector2, to: Vector2, color: Color) -> void:
+func _draw_arrow(layer: Control, from: Vector2, to: Vector2, alpha: float) -> void:
 	var length := from.distance_to(to)
 	if length < 12.0:
 		return
@@ -603,10 +608,27 @@ func _draw_arrow(layer: Control, from: Vector2, to: Vector2, color: Color) -> vo
 	var head := minf(46.0, length * 0.6)
 	var perpendicular := Vector2(-direction.y, direction.x)
 	var base := to - direction * head
-	layer.draw_circle(from, 9.0, color)
-	layer.draw_line(from, base + direction * 4.0, color, 14.0, true)
-	layer.draw_colored_polygon(PackedVector2Array([
-		to, base + perpendicular * 26.0, base - perpendicular * 26.0]), color)
+	var half_body := 7.0
+	var half_head := 26.0
+	# Degradé a lo largo de la flecha: base = color de la O, punta = color de la X.
+	var t_head := 1.0 - head / length
+	var c_start := _arrow_color_at(0.0, alpha)
+	var c_head := _arrow_color_at(t_head, alpha)
+	var c_tip := _arrow_color_at(1.0, alpha)
+	layer.draw_circle(from, 9.0, c_start)
+	layer.draw_polygon(PackedVector2Array([
+		from + perpendicular * half_body, from - perpendicular * half_body,
+		base - perpendicular * half_body, base + perpendicular * half_body]),
+		PackedColorArray([c_start, c_start, c_head, c_head]))
+	layer.draw_polygon(PackedVector2Array([
+		to, base + perpendicular * half_head, base - perpendicular * half_head]),
+		PackedColorArray([c_tip, c_head, c_head]))
+
+
+func _arrow_color_at(t: float, alpha: float) -> Color:
+	var color := arrow_base_color.lerp(arrow_tip_color, t)
+	color.a = alpha
+	return color
 
 
 # --- Refrescar lo que se ve -------------------------------------------------
