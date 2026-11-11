@@ -1,5 +1,5 @@
 extends Control
-## Tienda y colección: se abren cajas con monedas, y se elige qué figura, banner y fuente llevar puestos.
+## Tienda y colección: se abren cajas con monedas, y se ve la colección. Equipar se hace en Estilo.
 
 signal back_requested
 
@@ -344,9 +344,11 @@ func _preview_for(entry: Dictionary) -> Control:
 
 
 func _on_tile_pressed(id: String) -> void:
-	if collection.equip(id):
-		collection.save_to_disk()
-		_refresh()
+	# Equipar se hace en Estilo (menú); acá solo se mira la colección.
+	if collection.owns(id):
+		notice_label.text = "Lo equipás en la pestaña Estilo del menú."
+	else:
+		notice_label.text = "Todavía no la tenés: salí a buscarla en las cajas."
 
 
 # --- Cajas ------------------------------------------------------------------
@@ -436,14 +438,6 @@ func _reveal(column: VBoxContainer, crate: Control, result: Dictionary) -> void:
 		status.add_theme_color_override("font_color", Pal.accent)
 	column.add_child(status)
 	var buttons: Array = []
-	if not result["duplicate"]:
-		var equip := _button("Equipar", Pal.active)
-		equip.pressed.connect(func() -> void:
-			collection.equip(item["id"])
-			collection.save_to_disk()
-			_close_overlay())
-		column.add_child(equip)
-		buttons.append(equip)
 	var done := _button("Listo", Pal.cell)
 	done.pressed.connect(_close_overlay)
 	column.add_child(done)

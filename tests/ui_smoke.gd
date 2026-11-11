@@ -45,6 +45,32 @@ func _run() -> void:
 	app.menu._select_mark("O")
 	app.menu._set_selected_color(Color("22c55e"))
 	check(app.menu.color_o == Color("22c55e") and app.menu.color_x == Profile.DEFAULT_X, "el atajo cambia solo el color elegido")
+	# Estilo: solo se ven las conseguidas y se equipa desde ahí
+	var mcol = app.menu.collection
+	mcol.owned["heart"] = true
+	app.menu.set_colors_open(true, false)
+	app.menu._set_custom_section("pieces")
+	await process_frame
+	check(app.menu.equip_view.visible and not app.menu.colors_section.visible, "la sección Piezas reemplaza a los colores")
+	var tiles := _buttons_in(app.menu.equip_view)
+	var owned_fx := 0
+	for entry in Cosmetics.items_of_kind("fx"):
+		if mcol.owns(entry["id"]):
+			owned_fx += 1
+	var owned_fo := 0
+	for entry in Cosmetics.items_of_kind("fo"):
+		if mcol.owns(entry["id"]):
+			owned_fo += 1
+	check(tiles.size() == owned_fx + owned_fo, "Piezas lista solo lo conseguido")
+	check(owned_fx < Cosmetics.items_of_kind("fx").size(), "hay figuras sin conseguir que no se listan")
+	for button in tiles:
+		button.pressed.emit()
+		break
+	app.menu._set_custom_section("profile")
+	await process_frame
+	check(not _buttons_in(app.menu.equip_view).is_empty(), "Perfil lista banners y fuentes conseguidos")
+	app.menu._set_custom_section("colors")
+	check(app.menu.colors_section.visible, "se vuelve a la sección de colores")
 	check(app.menu.handle_back() and not app.menu.colors_open, "atrás vuelve a la página principal")
 	await create_timer(0.5).timeout
 	check(app.menu.main_page.position.x == 0.0, "la animación termina en la página principal")
@@ -149,7 +175,7 @@ func _run() -> void:
 	await process_frame
 	check(not app.menu.nav.visible, "en compu no hay barra de pestañas")
 	check(app.menu.main_page.position.x == 0.0 and app.menu.colors_page.position.x < 0.0 and app.menu.stats_page.position.x > 0.0, "en compu se ve una sola página, las otras a los costados")
-	check(app.menu._edges[0].visible and app.menu._edges[1].visible and app.menu._edges[0].label == "Colores" and app.menu._edges[1].label == "Estadísticas", "en compu hay zonas de hover a los costados")
+	check(app.menu._edges[0].visible and app.menu._edges[1].visible and app.menu._edges[0].label == "Estilo" and app.menu._edges[1].label == "Estadísticas", "en compu hay zonas de hover a los costados")
 	app.menu.edge_tick(0.1, Vector2(1850, 500))
 	check(app.menu._edges[1].progress > 0.0 and app.menu._edges[0].progress == 0.0, "el mouse encima resalta el botón del costado")
 	check(app.menu.page == 1, "el hover solo resalta, no cambia de pantalla")
@@ -353,9 +379,9 @@ func _run() -> void:
 	shop_collection.owned["heart"] = true
 	shop._select_tab("fx")
 	shop._on_tile_pressed("heart")
-	check(shop_collection.equipped["fx"] == "heart", "tocar una figura que tenés la equipa")
+	check(shop_collection.equipped["fx"] != "heart", "tocar una figura en la tienda no la equipa")
 	shop._on_tile_pressed("bolt")
-	check(shop_collection.equipped["fx"] == "heart", "tocar una bloqueada no hace nada")
+	check(shop_collection.equipped["fx"] != "bolt", "tocar una bloqueada no hace nada")
 	shop.queue_free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_collection.json"))
 	# Todas las figuras y banners se dibujan sin errores
@@ -541,3 +567,12 @@ func _click_at(app: Control, point: Vector2) -> void:
 	ev.pressed = true
 	ev.position = point
 	app.menu._input(ev)
+
+
+func _buttons_in(node: Node) -> Array:
+	var found: Array = []
+	for child in node.get_children():
+		if child is Button:
+			found.append(child)
+		found.append_array(_buttons_in(child))
+	return found

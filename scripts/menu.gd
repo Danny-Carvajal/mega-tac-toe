@@ -16,6 +16,7 @@ const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Stats := preload("res://scripts/stats.gd")
 const UltimateAI := preload("res://scripts/ai.gd")
+const EquipView := preload("res://scripts/equip_view.gd")
 
 
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
@@ -62,6 +63,10 @@ var practice_button: Button
 var practice_box: VBoxContainer
 var main_page: Control
 var colors_page: Control
+var colors_section: VBoxContainer
+var equip_view  # EquipView
+var custom_section := "colors"
+var _custom_tabs := {}
 var stats_page: Control
 var stats_donut: DonutChart
 var pager: Control
@@ -152,6 +157,8 @@ func set_page(index: int, animate := true) -> void:
 	server_panel.visible = false
 	_update_edges()
 	get_viewport().gui_release_focus()
+	if page == 0 and custom_section != "colors":
+		_set_custom_section(custom_section)
 	if page == 2 and stats_donut != null:
 		stats_donut.play()
 	var target := float(page)
@@ -414,16 +421,42 @@ func _build_colors_page() -> void:
 	var top := HBoxContainer.new()
 	root.add_child(top)
 	var heading := Label.new()
-	heading.text = "Tus colores"
+	heading.text = "Personalización"
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_theme_font_size_override("font_size", 64)
 	heading.add_theme_color_override("font_color", Pal.text)
 	top.add_child(heading)
 
-	root.add_child(_caption("Elegí una pieza y cambiale el color"))
+	# Tres secciones: colores, piezas (figuras) y perfil (banner + fuente).
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 14)
+	root.add_child(tabs)
+	_custom_tabs.clear()
+	for entry in [["colors", "Colores"], ["pieces", "Piezas"], ["profile", "Perfil"]]:
+		var tab_button := _make_small_button(entry[1])
+		tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var section_id: String = entry[0]
+		tab_button.pressed.connect(func() -> void:
+			if _taps_allowed():
+				_set_custom_section(section_id))
+		tabs.add_child(tab_button)
+		_custom_tabs[section_id] = tab_button
+
+	colors_section = VBoxContainer.new()
+	colors_section.add_theme_constant_override("separation", 28)
+	colors_section.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(colors_section)
+	equip_view = EquipView.new()
+	equip_view.collection = collection
+	equip_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	equip_view.visible = false
+	root.add_child(equip_view)
+	_set_custom_section("colors")
+
+	colors_section.add_child(_caption("Elegí una pieza y cambiale el color"))
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 24)
-	root.add_child(swatches)
+	colors_section.add_child(swatches)
 	_swatch_x = _make_swatch("X")
 	_swatch_o = _make_swatch("O")
 	swatches.add_child(_swatch_x)
@@ -431,7 +464,7 @@ func _build_colors_page() -> void:
 
 	# Selector grande: cuadro de saturación/brillo y barra de tono a lo ancho de la pantalla.
 	var center := CenterContainer.new()
-	root.add_child(center)
+	colors_section.add_child(center)
 	picker = ColorPicker.new()
 	picker.edit_alpha = false
 	picker.sliders_visible = false
@@ -447,12 +480,12 @@ func _build_colors_page() -> void:
 	picker.color_changed.connect(_on_picker_changed)
 	center.add_child(picker)
 
-	root.add_child(_caption("Atajos"))
+	colors_section.add_child(_caption("Atajos"))
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 20)
 	grid.add_theme_constant_override("v_separation", 20)
-	root.add_child(grid)
+	colors_section.add_child(grid)
 	for hex in PRESETS:
 		var preset := Button.new()
 		preset.custom_minimum_size = Vector2(0, 100)
@@ -471,7 +504,7 @@ func _build_colors_page() -> void:
 		color_x = Profile.DEFAULT_X
 		color_o = Profile.DEFAULT_O
 		_select_mark(selected_mark))
-	root.add_child(reset)
+	colors_section.add_child(reset)
 
 	var to_main := Chevron.new(1)
 	to_main.pressed.connect(func() -> void:
@@ -480,6 +513,21 @@ func _build_colors_page() -> void:
 	colors_page.add_child(to_main)
 	_chevrons.append(to_main)
 	_anchor_chevron(to_main, true)
+
+
+func _set_custom_section(section: String) -> void:
+	custom_section = section
+	colors_section.visible = section == "colors"
+	equip_view.visible = section != "colors"
+	if section != "colors":
+		equip_view.mode = section
+		equip_view.player_name = name_edit.text.strip_edges() if name_edit != null and not name_edit.text.strip_edges().is_empty() else profile.player_name
+		equip_view.color_x = color_x
+		equip_view.color_o = color_o
+		equip_view.refresh()
+	for key in _custom_tabs:
+		_style_button(_custom_tabs[key], Pal.active if key == section else Pal.cell)
+
 
 
 ## Página de estadísticas: dona con el porcentaje de victorias, barra, racha y últimas partidas.
@@ -785,7 +833,7 @@ func _layout_edges() -> void:
 
 ## Los costados de compu: se ven solo si hay página en esa dirección.
 func _update_edges() -> void:
-	var names := ["Colores", "Jugar", "Estadísticas"]
+	var names := ["Estilo", "Jugar", "Estadísticas"]
 	for edge in _edges:
 		var target: int = page + edge.dir
 		edge.visible = wide and target >= 0 and target <= 2 and not server_panel.visible
@@ -846,7 +894,7 @@ func _swipe_allowed(point: Vector2) -> bool:
 	if server_panel.visible and server_panel.get_global_rect().has_point(point):
 		return false
 	# En la página de colores, arrastrar sobre el selector es para elegir color, no para pasar de página.
-	if page == 0 and picker.get_global_rect().has_point(point):
+	if page == 0 and (picker.get_global_rect().has_point(point) or equip_view.get_global_rect().has_point(point)):
 		return false
 	return true
 
@@ -1045,7 +1093,7 @@ class Chevron extends Button:
 class NavBar extends Control:
 	signal tab_pressed(index: int)
 
-	const LABELS := ["Colores", "Jugar", "Estadísticas"]
+	const LABELS := ["Estilo", "Jugar", "Estadísticas"]
 	var position_f := 1.0
 	var colors: Array = [Color("e5484d"), Color("3b82f6")]
 	var _press_index := -1
