@@ -44,6 +44,22 @@ func _run() -> void:
 	check(local.small_buttons[4][2].text == "", "nueva partida limpia el tablero")
 	local.queue_free()
 
+	# --- Un tablero ganado sigue jugable y su marca es translúcida ---
+	var won := GameScreen.new()
+	won.setup_local(Profile.new())
+	root.add_child(won)
+	await process_frame
+	won.game.cells[0] = 1
+	won.game.cells[1] = 1
+	won.game.play(0, 2)
+	won.game.forced_board = -1
+	won._refresh()
+	check(won.result_labels[0].visible, "el tablero ganado muestra su marca grande")
+	check(won.result_labels[0].get_theme_color("font_color").a < 0.5, "la marca grande es translúcida")
+	check(not won.small_buttons[0][5].disabled, "las casillas libres del tablero ganado se pueden jugar")
+	check(won.small_buttons[0][0].disabled, "las ocupadas no")
+	won.queue_free()
+
 	# --- Juego online (mensajes del servidor simulados) ---
 	var start := {
 		"t": "start", "you": 2, "names": ["Ana", "Beto"],

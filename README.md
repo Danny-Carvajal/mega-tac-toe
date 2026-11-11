@@ -7,8 +7,10 @@ Ultimate Tic Tac Toe hecho en Godot 4, pensado para móvil y web, con partidas o
 - El tablero es un 3x3 de tableros 3x3.
 - El primer jugador elige libre dónde empezar (el orden de turno se sortea en online).
 - La casilla que jugás dentro de un mini tablero decide en cuál tablero grande juega el rival.
-- Si ese tablero ya está ganado o lleno, el rival elige libre.
-- Un tablero se gana con 3 en línea adentro. La partida se gana con 3 tableros en línea.
+- Si ese tablero está lleno, el rival elige libre.
+- Un tablero se gana con 3 en línea adentro (el primero en hacer línea se lo queda). Un tablero ganado
+  **sigue jugable** en sus casillas libres; su marca se ve translúcida encima.
+- La partida se gana con 3 tableros en línea.
 
 ## Turnos con reloj (estilo Polytopia "Live Game")
 

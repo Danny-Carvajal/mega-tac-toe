@@ -14,7 +14,9 @@ func _init() -> void:
 	test_wrong_board_is_illegal()
 	test_occupied_cell_is_illegal()
 	test_local_win()
-	test_forced_to_decided_board_gives_free_choice()
+	test_forced_to_full_board_gives_free_choice()
+	test_forced_to_won_board_still_forces()
+	test_won_board_keeps_first_winner()
 	test_local_draw()
 	test_global_win()
 	test_clock_runs_only_for_active_player()
@@ -73,15 +75,43 @@ func test_local_win() -> void:
 	g.cells[1] = UltimateGame.X
 	g.play(0, 2)
 	check(g.board_results[0] == UltimateGame.X, "X gana el tablero 0 con 3 en línea")
-	check(not g.is_legal(0, 5), "no se puede jugar en un tablero ya ganado")
+	g.forced_board = -1
+	check(g.is_legal(0, 5), "un tablero ganado sigue jugable en sus casillas libres")
+	check(not g.is_legal(0, 0), "pero no en las casillas ocupadas")
 
 
-func test_forced_to_decided_board_gives_free_choice() -> void:
+func test_forced_to_full_board_gives_free_choice() -> void:
 	var g := UltimateGame.new()
-	g.board_results[4] = UltimateGame.X
+	# Tablero 4 lleno y sin línea: X O X / X O O / O X X
+	var marks := [1, 2, 1, 1, 2, 2, 2, 1, 1]
+	for i in 9:
+		g.cells[36 + i] = marks[i]
+	g.board_results[4] = UltimateGame.DRAW
 	g.play(0, 4)
-	check(g.forced_board == -1, "si mandan a un tablero decidido, elige libre")
+	check(g.forced_board == -1, "si mandan a un tablero lleno, elige libre")
 	check(g.legal_moves().size() > 9, "con elección libre hay más de 9 jugadas")
+
+
+func test_forced_to_won_board_still_forces() -> void:
+	var g := UltimateGame.new()
+	g.cells[0] = UltimateGame.X
+	g.cells[1] = UltimateGame.X
+	g.play(0, 2)  # X gana el tablero 0 y manda a O al tablero 2
+	g.play(2, 0)  # O manda a X de vuelta al tablero 0, que está ganado pero con espacio
+	check(g.forced_board == 0, "mandan a un tablero ganado con casillas libres: se juega ahí")
+	check(g.legal_moves().size() == 6, "las 6 casillas libres del tablero ganado son jugables")
+
+
+func test_won_board_keeps_first_winner() -> void:
+	var g := UltimateGame.new()
+	for i in 3:
+		g.cells[i] = UltimateGame.X
+	g.board_results[0] = UltimateGame.X
+	g.cells[3] = UltimateGame.O
+	g.cells[4] = UltimateGame.O
+	g.current_player = UltimateGame.O
+	g.play(0, 5)  # O hace línea en el mismo tablero
+	check(g.board_results[0] == UltimateGame.X, "el primero en hacer línea se queda el tablero")
 
 
 func test_local_draw() -> void:

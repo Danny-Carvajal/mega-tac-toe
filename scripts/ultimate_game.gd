@@ -32,7 +32,7 @@ var current_player: int = X
 var forced_board: int = -1
 ## Resultado de la partida: NONE mientras siga, X, O o DRAW.
 var result: int = NONE
-## Jugadas hechas ({big, small, player, forced_before}), para poder deshacer la última.
+## Estado antes de cada jugada ({player, forced_before, cells, results}), para poder deshacer la última.
 var _history: Array[Dictionary] = []
 
 
@@ -64,8 +64,7 @@ func is_legal(big: int, small: int) -> bool:
 		return false
 	if big < 0 or big > 8 or small < 0 or small > 8:
 		return false
-	if board_results[big] != NONE:
-		return false
+	# Un tablero ganado sigue siendo jugable en sus casillas libres.
 	if forced_board != -1 and forced_board != big:
 		return false
 	return cells[big * 9 + small] == NONE
@@ -86,16 +85,22 @@ func play(big: int, small: int) -> bool:
 	if not is_legal(big, small):
 		return false
 
+	# Foto del estado anterior, para poder deshacer la jugada si le saltan el turno al rival.
 	_history.append({
-		"big": big, "small": small, "player": current_player, "forced_before": forced_board,
+		"player": current_player,
+		"forced_before": forced_board,
+		"cells": cells.duplicate(),
+		"results": board_results.duplicate(),
 	})
 	cells[big * 9 + small] = current_player
 
-	var local := _line_winner(cells.slice(big * 9, big * 9 + 9))
-	if local != NONE:
-		board_results[big] = local
-	elif _board_is_full(big):
-		board_results[big] = DRAW
+	# El primero en hacer línea se queda con el tablero, aunque después se siga jugando ahí.
+	if board_results[big] == NONE:
+		var local := _line_winner(cells.slice(big * 9, big * 9 + 9))
+		if local != NONE:
+			board_results[big] = local
+		elif _board_is_full(big):
+			board_results[big] = DRAW
 
 	var global := _line_winner(board_results)
 	if global != NONE:
@@ -103,9 +108,9 @@ func play(big: int, small: int) -> bool:
 	elif not board_results.has(NONE):
 		result = DRAW
 
-	# La casilla que jugué decide el tablero del rival; si ese ya está
-	# decidido, el rival elige libre.
-	forced_board = small if board_results[small] == NONE else -1
+	# La casilla que jugué decide el tablero del rival; solo si ese tablero
+	# está lleno el rival elige libre.
+	forced_board = -1 if _board_is_full(small) else small
 
 	if not is_over():
 		current_player = O if current_player == X else X
@@ -128,15 +133,8 @@ func skip_turn() -> bool:
 
 func _undo_last_move() -> void:
 	var last: Dictionary = _history.pop_back()
-	cells[int(last["big"]) * 9 + int(last["small"])] = NONE
-	for big in 9:
-		var local := _line_winner(cells.slice(big * 9, big * 9 + 9))
-		if local != NONE:
-			board_results[big] = local
-		elif _board_is_full(big):
-			board_results[big] = DRAW
-		else:
-			board_results[big] = NONE
+	cells.assign(last["cells"])
+	board_results.assign(last["results"])
 	result = NONE
 	forced_board = int(last["forced_before"])
 	current_player = int(last["player"])

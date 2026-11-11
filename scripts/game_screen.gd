@@ -300,16 +300,18 @@ func _refresh() -> void:
 		for move in game.legal_moves():
 			legal[move] = true
 	var can_play := not finished and (not online or game.current_player == my_seat)
+	# Tableros donde hay que jugar ahora (un tablero ganado sigue contando si le quedan casillas).
+	var playable_boards := {}
+	for move in legal:
+		playable_boards[move.x] = true
 
 	for big in 9:
 		var board_result: int = game.board_results[big]
 		var decided := board_result != UltimateGame.NONE
-		var active := (
-			not game.is_over() and not finished and not decided
-			and (game.forced_board == -1 or game.forced_board == big)
-		)
-		panels[big].add_theme_stylebox_override("panel", _flat(COLOR_ACTIVE if active else COLOR_PANEL, 18))
-		grids[big].modulate.a = 0.25 if decided else 1.0
+		var panel_color := COLOR_ACTIVE if playable_boards.has(big) else COLOR_PANEL
+		if decided:
+			panel_color = panel_color.lerp(_mark_color(board_result), 0.12)
+		panels[big].add_theme_stylebox_override("panel", _flat(panel_color, 18))
 
 		for small in 9:
 			var mark := game.get_cell(big, small)
@@ -321,7 +323,10 @@ func _refresh() -> void:
 		var label := result_labels[big]
 		label.visible = decided
 		label.text = _mark_text(board_result)
-		label.add_theme_color_override("font_color", _mark_color(board_result))
+		# Translúcida para que se vean y se puedan tocar las casillas de abajo.
+		var label_color := _mark_color(board_result)
+		label_color.a = 0.3
+		label.add_theme_color_override("font_color", label_color)
 
 	if online:
 		left_button.text = "Volver al menú" if finished else "Rendirse"
