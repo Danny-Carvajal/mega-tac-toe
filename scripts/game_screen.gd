@@ -33,6 +33,12 @@ var _start_names: Array = []
 var _start_colors: Array = []
 var _clock_received_ms := 0
 var _result_text := ""
+## Fin de partida: cartel grande al medio (Ganaste / Perdiste / Empate) con "Ver tablero" y "Volver al menú".
+var result_layer: Control
+var _result_title := ""
+var _result_sub := ""
+var _result_color := Color.WHITE
+var _result_shown := false
 ## Aviso temporal que reemplaza el estado (errores del servidor, reglas distintas).
 var _notice := ""
 const NOTICE_RECONNECTING := "Reconectando..."
@@ -80,6 +86,8 @@ var bottom_row: BoxContainer
 var turn_banner: PanelContainer
 var _last_banner_key := ""
 const COLOR_RESIGN := Color("a8323a")
+const COLOR_WIN := Color("3ecf8e")
+const COLOR_LOSS := Color("e5484d")
 var new_game_button: Button
 var panels: Array[PanelContainer] = []
 var grids: Array[GridContainer] = []
@@ -180,10 +188,19 @@ func apply_over(data: Dictionary) -> void:
 	var reason := str(data.get("reason", ""))
 	if winner == 0:
 		_result_text = "Empate"
+		_result_title = "EMPATE"
+		_result_color = Pal.muted
+		_result_sub = ""
 	elif winner == my_seat:
 		_result_text = "Ganaste" + _reason_suffix(reason, true)
+		_result_title = "¡GANASTE!"
+		_result_color = COLOR_WIN
+		_result_sub = _reason_suffix(reason, true).strip_edges().trim_prefix("(").trim_suffix(")")
 	else:
 		_result_text = "Perdiste" + _reason_suffix(reason, false)
+		_result_title = "PERDISTE"
+		_result_color = COLOR_LOSS
+		_result_sub = _reason_suffix(reason, false).strip_edges().trim_prefix("(").trim_suffix(")")
 	_refresh()
 
 
@@ -392,6 +409,7 @@ func _build_ui() -> void:
 
 	big_grid.resized.connect(notes_layer.queue_redraw)
 	_build_confirm_dialog()
+	_build_result_overlay()
 
 
 	side_box = VBoxContainer.new()
@@ -573,7 +591,95 @@ func _build_confirm_dialog() -> void:
 	row.add_child(yes)
 
 
+## Cartel de fin de partida. Se arma al terminar y se descarta con "Ver tablero".
+func _build_result_overlay() -> void:
+	result_layer = Control.new()
+	result_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	result_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	result_layer.visible = false
+	add_child(result_layer)
+
+
+func _show_result_overlay() -> void:
+	for child in result_layer.get_children():
+		child.queue_free()
+	var dim := ColorRect.new()
+	dim.color = Color(Pal.bg, 0.8)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	result_layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	result_layer.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 28)
+	box.custom_minimum_size = Vector2(820, 0)
+	center.add_child(box)
+	var title := Label.new()
+	title.text = _result_title
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 160)
+	title.add_theme_color_override("font_color", _result_color)
+	title.add_theme_constant_override("outline_size", 0)
+	box.add_child(title)
+	if not _result_sub.is_empty():
+		var sub := Label.new()
+		sub.text = _result_sub
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sub.add_theme_font_size_override("font_size", 40)
+		sub.add_theme_color_override("font_color", Pal.muted)
+		box.add_child(sub)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 30)
+	box.add_child(spacer)
+	var view := _make_button("Ver tablero", Pal.cell)
+	view.pressed.connect(_dismiss_result_overlay)
+	box.add_child(view)
+	var back := _make_button("Volver al menú", Pal.active)
+	back.pressed.connect(func() -> void: exit_requested.emit())
+	box.add_child(back)
+	result_layer.visible = true
+	_result_shown = true
+	_update_notes_enabled()
+	Fx.fade_in(result_layer, 0.25)
+	Fx.pop(title, 0.6, 0.45)
+	Fx.stagger_in([view, back], 0.1, 0.3)
+
+
+func _dismiss_result_overlay() -> void:
+	result_layer.visible = false
+	_update_notes_enabled()
+
+
+## Con el cartel de fin puesto los apuntes no se pueden usar: se activan al tocar "Ver tablero".
+func _update_notes_enabled() -> void:
+	if notes_button != null:
+		notes_button.disabled = result_layer != null and result_layer.visible
+
+
+func _check_result_overlay() -> void:
+	if result_layer == null or _result_shown:
+		return
+	if online:
+		if not finished or disconnected or _result_title.is_empty():
+			return
+	elif game.is_over():
+		if game.result == UltimateGame.DRAW:
+			_result_title = "EMPATE"
+			_result_color = Pal.muted
+		else:
+			_result_title = "¡GANÓ %s!" % _mark_text(game.result)
+			_result_color = _mark_color(game.result)
+		_result_sub = ""
+	else:
+		return
+	_show_result_overlay()
+
+
 func _on_new_game_pressed() -> void:
+	_result_shown = false
+	result_layer.visible = false
+	_update_notes_enabled()
 	game.reset()
 	last_move = Vector2i(-1, -1)
 	clear_arrows()
@@ -781,6 +887,7 @@ func _refresh() -> void:
 		_style_button(left_button, Pal.cell if finished else COLOR_RESIGN)
 	_refresh_status()
 	_refresh_clocks()
+	_check_result_overlay()
 
 
 func _refresh_status() -> void:
