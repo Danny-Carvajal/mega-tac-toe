@@ -88,6 +88,7 @@ func show_menu(status: String = "", page := 1) -> void:
 		show_menu()
 		menu.open_settings.call_deferred())
 	menu.local_requested.connect(_on_local_requested)
+	menu.practice_requested.connect(_on_practice_requested)
 	menu.online_requested.connect(_on_online_requested)
 	menu.cancel_requested.connect(_on_cancel_requested)
 	_show(menu)
@@ -147,6 +148,13 @@ func show_replay(record: Dictionary) -> void:
 func _on_local_requested() -> void:
 	game_screen = GameScreen.new()
 	game_screen.setup_local(profile)
+	game_screen.exit_requested.connect(show_menu)
+	_show(game_screen)
+
+
+func _on_practice_requested(level: int) -> void:
+	game_screen = GameScreen.new()
+	game_screen.setup_practice(profile, level)
 	game_screen.exit_requested.connect(show_menu)
 	_show(game_screen)
 

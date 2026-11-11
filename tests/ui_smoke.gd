@@ -164,6 +164,36 @@ func _run() -> void:
 	await process_frame
 	check(app.menu.nav.visible and app.menu.colors_page.position.x == -width, "al volver a vertical vuelve la barra y las páginas con swipe")
 
+	# --- Práctica contra la IA ---
+	check(app.menu.practice_button != null and not app.menu.practice_box.visible, "hay botón de práctica y los niveles arrancan ocultos")
+	app.menu._set_practice_open(true)
+	check(app.menu.practice_box.visible and not app.menu.private_box.visible, "Práctica muestra los 5 niveles y cierra Privado")
+	check(app.menu.practice_box.get_child_count() == 5, "hay 5 niveles de IA")
+	app.menu.practice_box.get_child(2).pressed.emit()
+	await process_frame
+	check(app.game_screen != null and app.game_screen.vs_ai and app.game_screen.ai_level == 3, "tocar el nivel 3 abre la práctica contra la IA nivel 3")
+	app.show_menu()
+	await process_frame
+	var practice := GameScreen.new()
+	var practice_profile := Profile.new()
+	practice_profile.player_name = "Danny"
+	practice.setup_practice(practice_profile, 1)
+	root.add_child(practice)
+	await process_frame
+	check(practice.status_label.text.begins_with("Tu turno"), "práctica: empieza la persona (X)")
+	practice._on_small_pressed(4, 4)
+	check(practice.small_buttons[4][4].text == "X" and practice.game.current_player == 2, "práctica: mi jugada se dibuja y le toca a la IA")
+	check(practice.status_label.text.contains("pensando"), "práctica: se avisa que la IA piensa")
+	practice._on_small_pressed(4, 0)
+	check(practice.small_buttons[4][0].text == "", "práctica: no puedo jugar mientras la IA piensa")
+	await create_timer(1.2).timeout
+	check(practice.game.cells.count(2) == 1 and practice.game.current_player == 1, "práctica: la IA contestó con una jugada")
+	check(practice.status_label.text.begins_with("Tu turno"), "práctica: vuelve mi turno")
+	practice._on_new_game_pressed()
+	check(practice.game.cells.count(0) == 81 and not practice._ai_busy, "práctica: nueva partida limpia el tablero")
+	practice.queue_free()
+	await process_frame
+
 	app.menu.local_requested.emit()
 	await process_frame
 	check(app.game_screen != null, "jugar local abre la pantalla de juego")

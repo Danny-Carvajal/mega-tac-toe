@@ -87,3 +87,9 @@ Cada jugada ocupa 1 byte (`big * 9 + small`, 255 = salto de turno) y el registro
 partida pesa ~60 caracteres más los nombres. Se abre desde Estadísticas > "Historial de partidas": muestra la lista y,
 al tocar una, la repetición (paso a paso, con Play en vivo, y con apuntes). Cuando haya cuentas, los mismos
 registros se pueden subir al servidor.
+
+## Práctica contra la IA
+
+Debajo de JUGAR hay un botón chiquito "Práctica" con 5 niveles (`scripts/ai.gd`): 1 Novato (azar), 2 Aprendiz (ve jugadas de un paso),
+3 Estratega (3 jugadas adelante), 4 Experto (5 jugadas adelante) y 5 Maestro (búsqueda alfa-beta por tiempo, ~1,5 s por jugada).
+La persona es X y empieza. La IA piensa en un hilo aparte (en la web, sin hilos, piensa menos). Las partidas de práctica todavía no se guardan en estadísticas ni historial.

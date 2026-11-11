@@ -6,6 +6,7 @@ extends Control
 signal appearance_changed
 signal history_requested
 signal local_requested
+signal practice_requested(level: int)
 signal online_requested(kind: String, code: String)
 signal cancel_requested
 
@@ -13,6 +14,7 @@ const Pal := preload("res://scripts/pal.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Stats := preload("res://scripts/stats.gd")
+const UltimateAI := preload("res://scripts/ai.gd")
 
 
 const PRESETS := ["e5484d", "f97316", "facc15", "22c55e", "06b6d4", "3b82f6", "a855f7", "ec4899"]
@@ -53,6 +55,8 @@ var server_button: Button
 var theme_button: Button
 var private_button: Button
 var private_box: VBoxContainer
+var practice_button: Button
+var practice_box: VBoxContainer
 var main_page: Control
 var colors_page: Control
 var stats_page: Control
@@ -287,6 +291,30 @@ func _build_main_page() -> void:
 	private_button.add_theme_font_size_override("font_size", 38)
 	private_button.pressed.connect(func() -> void: _set_private_open(not private_box.visible))
 	play_row.add_child(private_button)
+
+	# Modo práctica: botón chiquito debajo de JUGAR; al tocarlo salen los 5 niveles de la IA.
+	practice_button = _make_small_button("Práctica")
+	practice_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	practice_button.custom_minimum_size = Vector2(340, 80)
+	practice_button.add_theme_font_size_override("font_size", 34)
+	_action_buttons.append(practice_button)
+	practice_button.pressed.connect(func() -> void: _set_practice_open(not practice_box.visible))
+	root.add_child(practice_button)
+
+	practice_box = VBoxContainer.new()
+	practice_box.add_theme_constant_override("separation", 14)
+	practice_box.visible = false
+	root.add_child(practice_box)
+	for level in range(1, 6):
+		var level_button := _make_small_button("%d · %s   %s" % [level, UltimateAI.LEVEL_NAMES[level - 1], UltimateAI.LEVEL_HINTS[level - 1]])
+		level_button.add_theme_font_size_override("font_size", 32)
+		_action_buttons.append(level_button)
+		level_button.pressed.connect(func() -> void:
+			if not _taps_allowed():
+				return
+			_save_profile()
+			practice_requested.emit(level))
+		practice_box.add_child(level_button)
 
 	# Sala privada: recién aparece al tocar "Privado".
 	private_box = VBoxContainer.new()
@@ -671,7 +699,18 @@ func _layout_pages() -> void:
 		_set_page_f(_page_f)
 
 
+func _set_practice_open(open: bool) -> void:
+	if open and private_box.visible:
+		_set_private_open(false)
+	practice_box.visible = open
+	_style_button(practice_button, Pal.active if open else Pal.cell)
+	if open:
+		Fx.pop(practice_box, 0.92, 0.2)
+
+
 func _set_private_open(open: bool) -> void:
+	if open and practice_box.visible:
+		_set_practice_open(false)
 	private_box.visible = open
 	_style_button(private_button, Pal.active if open else Pal.cell)
 	if open:

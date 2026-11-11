@@ -11,12 +11,23 @@ const History := preload("res://scripts/history.gd")
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
+const UltimateAI := preload("res://scripts/ai.gd")
 
 ## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
 const ARROW_ALPHA := 0.7
 
 var game := UltimateGame.new()
 var online := false
+## Modo práctica: una persona contra la IA (ver UltimateAI). La persona es X y empieza.
+var vs_ai := false
+var ai_level := 1
+var ai_seat := UltimateGame.O
+const AI_MIN_THINK_MS := 650
+var _ai_busy := false
+var _ai_threaded := false
+var _ai_thread: Thread
+var _ai_runner: UltimateAI
+var _ai_started_ms := 0
 var my_seat := 0
 var finished := false
 var disconnected := false
@@ -121,6 +132,19 @@ func setup_local(profile: Profile) -> void:
 	names = ["", "X", "O"]
 
 
+## Práctica contra la IA: la persona juega con X (empieza) y la IA con O.
+func setup_practice(profile: Profile, level: int) -> void:
+	online = false
+	vs_ai = true
+	ai_level = clampi(level, 1, 5)
+	my_seat = UltimateGame.X
+	ai_seat = UltimateGame.O
+	arrow_tip_color = profile.color_x
+	arrow_base_color = profile.color_o
+	colors = [Pal.muted, profile.color_x, profile.color_o]
+	names = ["", profile.player_name, "IA %s" % UltimateAI.LEVEL_NAMES[ai_level - 1]]
+
+
 ## Repetición de una partida guardada (ver History.make_record).
 func setup_replay(record: Dictionary) -> void:
 	replay = true
@@ -179,6 +203,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if online:
 		_refresh_clocks()
+	if vs_ai:
+		_ai_poll()
 	if replay and replay_playing and Time.get_ticks_msec() >= _replay_next_ms:
 		if replay_index >= replay_log.size():
 			_set_replay_playing(false)
@@ -195,6 +221,66 @@ func show_notice(text: String, duration_ms := 3500) -> void:
 	_notice = text
 	_notice_until_ms = Time.get_ticks_msec() + duration_ms
 	_refresh_status()
+
+
+func _exit_tree() -> void:
+	_ai_cancel()
+
+
+# --- IA (modo práctica) -----------------------------------------------------
+
+## ¿Hay una sola persona con asiento propio (online o contra la IA)?
+func _single_seat() -> bool:
+	return online or vs_ai
+
+
+## Si le toca a la IA, empieza a pensar (en un hilo si se puede, para que la pantalla no se congele).
+func _ai_maybe_start() -> void:
+	if not vs_ai or _ai_busy or game.is_over() or game.current_player != ai_seat:
+		return
+	_ai_busy = true
+	_ai_started_ms = Time.get_ticks_msec()
+	_ai_runner = UltimateAI.new()
+	_ai_runner.load_state(game.cells, game.board_results, game.forced_board, game.current_player)
+	_ai_threaded = not OS.has_feature("web")  # en la web no hay hilos: ahí piensa menos y sin hilo
+	if _ai_threaded:
+		_ai_thread = Thread.new()
+		_ai_thread.start(_ai_runner.choose.bind(ai_level, true))
+
+
+func _ai_poll() -> void:
+	if not _ai_busy:
+		return
+	var elapsed := Time.get_ticks_msec() - _ai_started_ms
+	if elapsed < AI_MIN_THINK_MS:
+		return  # un mínimo de "pensando" para que las jugadas no aparezcan de golpe
+	var move := Vector2i(-1, -1)
+	if _ai_threaded:
+		if _ai_thread.is_alive():
+			return
+		move = _ai_thread.wait_to_finish()
+		_ai_thread = null
+	else:
+		move = _ai_runner.choose(ai_level, false)
+	_ai_runner = null
+	_ai_busy = false
+	if game.is_over() or game.current_player != ai_seat:
+		return
+	var mover := game.current_player
+	if game.play(move.x, move.y):
+		last_move = move
+		last_move_player = mover
+	_refresh()
+
+
+func _ai_cancel() -> void:
+	if _ai_runner != null:
+		_ai_runner.cancelled = true
+	if _ai_thread != null:
+		_ai_thread.wait_to_finish()
+		_ai_thread = null
+	_ai_runner = null
+	_ai_busy = false
 
 
 # --- Eventos del servidor ---------------------------------------------------
@@ -570,6 +656,8 @@ func _on_small_pressed(big: int, small: int) -> void:
 			return
 		move_requested.emit(big, small)
 	else:
+		if vs_ai and (game.current_player != my_seat or _ai_busy):
+			return
 		var mover := game.current_player
 		if game.play(big, small):
 			last_move = Vector2i(big, small)
@@ -719,10 +807,14 @@ func _check_result_overlay() -> void:
 		if game.result == UltimateGame.DRAW:
 			_result_title = "EMPATE"
 			_result_color = Pal.muted
+		elif vs_ai:
+			var won := game.result == my_seat
+			_result_title = "¡GANASTE!" if won else "PERDISTE"
+			_result_color = COLOR_WIN if won else COLOR_LOSS
 		else:
 			_result_title = "¡GANÓ %s!" % _mark_text(game.result)
 			_result_color = _mark_color(game.result)
-		_result_sub = ""
+		_result_sub = "Práctica contra %s" % names[ai_seat] if vs_ai else ""
 	else:
 		return
 	_show_result_overlay()
@@ -732,6 +824,7 @@ func _on_new_game_pressed() -> void:
 	_result_shown = false
 	result_layer.visible = false
 	_update_notes_enabled()
+	_ai_cancel()
 	game.reset()
 	last_move = Vector2i(-1, -1)
 	clear_arrows()
@@ -744,7 +837,7 @@ func _on_new_game_pressed() -> void:
 ## que responder. En online solo se marca la del rival, no la propia.
 func _apply_highlight() -> void:
 	var target := Vector2i(-1, -1)
-	if last_move.x >= 0 and (not online or last_move_player != my_seat):
+	if last_move.x >= 0 and (not _single_seat() or last_move_player != my_seat):
 		target = last_move
 	if target == _highlighted:
 		return
@@ -1008,7 +1101,7 @@ func _refresh() -> void:
 	if not finished:
 		for move in game.legal_moves():
 			legal[move] = true
-	var can_play := not finished and not replay and (not online or game.current_player == my_seat)
+	var can_play := not finished and not replay and (not _single_seat() or game.current_player == my_seat)
 	# Tableros donde hay que jugar ahora (un tablero ganado sigue contando si le quedan casillas).
 	var playable_boards := {}
 	for move in legal:
@@ -1055,6 +1148,7 @@ func _refresh() -> void:
 	_refresh_status()
 	_refresh_clocks()
 	_check_result_overlay()
+	_ai_maybe_start()
 
 
 func _refresh_status() -> void:
@@ -1076,6 +1170,10 @@ func _refresh_status() -> void:
 			status_label.text = "Empate"
 			status_label.add_theme_color_override("font_color", Pal.muted)
 			_style_banner(Pal.muted, false)
+		elif vs_ai:
+			status_label.text = "¡Ganaste!" if game.result == my_seat else "Ganó %s" % names[ai_seat]
+			status_label.add_theme_color_override("font_color", Color.WHITE)
+			_style_banner(_mark_color(game.result), true)
 		else:
 			status_label.text = "Ganó %s" % _mark_text(game.result)
 			status_label.add_theme_color_override("font_color", Color.WHITE)
@@ -1085,13 +1183,15 @@ func _refresh_status() -> void:
 	var text: String
 	if online:
 		text = "Tu turno" if game.current_player == my_seat else "Turno de %s" % names[game.current_player]
+	elif vs_ai:
+		text = "Tu turno" if game.current_player == my_seat else "%s está pensando..." % names[ai_seat]
 	else:
 		text = "Turno de %s" % _mark_text(game.current_player)
-	if game.forced_board == -1 and (not online or game.current_player == my_seat):
+	if game.forced_board == -1 and (not _single_seat() or game.current_player == my_seat):
 		text += " - elegí cualquier tablero"
 	status_label.text = text
-	status_label.add_theme_color_override("font_color", Color.WHITE if (not online or game.current_player == my_seat) else _mark_color(game.current_player))
-	var mine := not online or game.current_player == my_seat
+	status_label.add_theme_color_override("font_color", Color.WHITE if (not _single_seat() or game.current_player == my_seat) else _mark_color(game.current_player))
+	var mine := not _single_seat() or game.current_player == my_seat
 	_style_banner(_mark_color(game.current_player), mine)
 	var key := "%d:%d" % [game.current_player, game.cells.count(UltimateGame.NONE)]
 	if key != _last_banner_key:

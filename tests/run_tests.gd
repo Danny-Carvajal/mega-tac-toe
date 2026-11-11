@@ -5,6 +5,7 @@ extends SceneTree
 const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const TurnClock := preload("res://scripts/turn_clock.gd")
 const History := preload("res://scripts/history.gd")
+const UltimateAI := preload("res://scripts/ai.gd")
 
 var failures := 0
 
@@ -26,6 +27,10 @@ func _init() -> void:
 	test_clock_expiry()
 	test_skip_turn()
 	test_clock_skip_refill()
+	test_ai_mirrors_the_game()
+	test_ai_moves_are_legal()
+	test_ai_finds_the_winning_move()
+	test_ai_levels_get_stronger()
 
 	if failures == 0:
 		print("OK: todos los tests pasaron")
@@ -221,3 +226,96 @@ func test_history_encoding() -> void:
 	check(History.decode("") == [], "historial vacío")
 	var record := History.make_record(["Ana", "Beto"], ["#ff0000", "#0000ff"], 1, 1, "line", log)
 	check(record["n"] == ["Ana", "Beto"] and record["w"] == 1 and History.decode(record["m"]) == log, "el registro lleva nombres, ganador y jugadas")
+
+
+# --- IA (modo práctica) -----------------------------------------------------
+
+func test_ai_mirrors_the_game() -> void:
+	# La copia compacta de la IA tiene que coincidir con UltimateGame en partidas al azar.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var mismatches := 0
+	for g in 60:
+		var game := UltimateGame.new()
+		var ai := UltimateAI.new()
+		ai.load_state(game.cells, game.board_results, game.forced_board, game.current_player)
+		while not game.is_over():
+			var moves := game.legal_moves()
+			if ai._gen_moves().size() != moves.size():
+				mismatches += 1
+				break
+			var move: Vector2i = moves[rng.randi() % moves.size()]
+			game.play(move.x, move.y)
+			ai._push(move.x * 9 + move.y)
+			if ai.result != game.result or ai.res != PackedInt32Array(game.board_results):
+				mismatches += 1
+				break
+	check(mismatches == 0, "la IA entiende las reglas igual que el juego (60 partidas al azar)")
+
+
+func test_ai_moves_are_legal() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var illegal := 0
+	for level in [1, 2, 3, 4]:
+		var game := UltimateGame.new()
+		for i in 14:
+			var ai := UltimateAI.new()
+			ai.load_state(game.cells, game.board_results, game.forced_board, game.current_player)
+			var move := ai.choose(level)
+			if not game.play(move.x, move.y):
+				illegal += 1
+				break
+	check(illegal == 0, "los niveles 1 a 4 siempre juegan jugadas legales")
+	var game5 := UltimateGame.new()
+	game5.play(4, 4)
+	var ai5 := UltimateAI.new()
+	ai5.load_state(game5.cells, game5.board_results, game5.forced_board, game5.current_player)
+	var reply := ai5.choose(5)
+	check(game5.is_legal(reply.x, reply.y) and reply.x == 4, "el nivel 5 juega legal y en el tablero que le tocaba")
+
+
+func test_ai_finds_the_winning_move() -> void:
+	# X ya tiene los tableros 0 y 1; en el tablero 2 tiene dos en línea: jugar (2, 2) gana la partida.
+	var game := UltimateGame.new()
+	game.cells[18] = UltimateGame.X
+	game.cells[19] = UltimateGame.X
+	game.cells[22] = UltimateGame.O
+	game.cells[23] = UltimateGame.O
+	game.board_results[0] = UltimateGame.X
+	game.board_results[1] = UltimateGame.X
+	var ai := UltimateAI.new()
+	ai.load_state(game.cells, game.board_results, 2, UltimateGame.X)
+	check(ai.choose(5) == Vector2i(2, 2), "el nivel 5 gana la partida cuando puede")
+	# Lo mismo jugando de O.
+	var game_o := UltimateGame.new()
+	game_o.cells[18] = UltimateGame.O
+	game_o.cells[19] = UltimateGame.O
+	game_o.board_results[0] = UltimateGame.O
+	game_o.board_results[1] = UltimateGame.O
+	var ai_o := UltimateAI.new()
+	ai_o.load_state(game_o.cells, game_o.board_results, 2, UltimateGame.O)
+	check(ai_o.choose(5) == Vector2i(2, 2), "el nivel 5 también gana jugando de O")
+
+
+func test_ai_levels_get_stronger() -> void:
+	# Cada nivel le gana al anterior (jugando de los dos lados, pocas partidas para que sea rápido).
+	var pairs := [[2, 1, 6], [4, 2, 4]]
+	for pair in pairs:
+		var strong: int = pair[0]
+		var weak: int = pair[1]
+		var strong_wins := 0
+		var weak_wins := 0
+		for gi in int(pair[2]):
+			var game := UltimateGame.new()
+			var strong_seat := 1 if gi % 2 == 0 else 2
+			while not game.is_over():
+				var ai := UltimateAI.new()
+				ai.load_state(game.cells, game.board_results, game.forced_board, game.current_player)
+				var move := ai.choose(strong if game.current_player == strong_seat else weak)
+				game.play(move.x, move.y)
+			if game.result == strong_seat:
+				strong_wins += 1
+			elif game.result != UltimateGame.DRAW:
+				weak_wins += 1
+		check(strong_wins > weak_wins, "el nivel %d le gana al nivel %d (%d-%d)" % [strong, weak, strong_wins, weak_wins])
