@@ -6,6 +6,7 @@ const Pal := preload("res://scripts/pal.gd")
 
 const GameScreen := preload("res://scripts/game_screen.gd")
 const Profile := preload("res://scripts/profile.gd")
+const IntroScreen := preload("res://scripts/intro_screen.gd")
 
 var failures := 0
 
@@ -316,6 +317,39 @@ func _run() -> void:
 	app2._on_net_message({"t": "resume_failed"})
 	check(rg.finished and rg.status_label.text == "Se cayó la conexión", "si la partida ya no existe, termina")
 	app2.queue_free()
+
+	# --- Presentación online: VS + moneda ---
+	var intro_start := {"t": "start", "you": 2, "names": ["Ana", "Beto"], "colors": ["#e5484d", "#3b82f6"],
+			"clocks": [30000, 30000], "intro_ms": 900, "rules": 2}
+	var intro_game := GameScreen.new()
+	intro_game.setup_online(intro_start, Profile.new())
+	root.add_child(intro_game)
+	await process_frame
+	check(intro_game.intro_layer != null and intro_game._intro_active(), "online: arranca con la presentación VS")
+	check(intro_game.intro_layer.cards.size() == 2 and intro_game.intro_layer.my_name == "Beto" and intro_game.intro_layer.opponent_name == "Ana", "el VS muestra a los dos jugadores (yo y el rival)")
+	var intro_sent: Array = []
+	intro_game.move_requested.connect(func(big: int, small: int) -> void: intro_sent.append([big, small]))
+	intro_game.apply_move({"big": 4, "small": 4, "player": 1, "clocks": [30000, 30000]})
+	intro_game._on_small_pressed(4, 0)
+	check(intro_sent.is_empty(), "durante la presentación no se puede jugar")
+	await create_timer(0.5).timeout
+	check(intro_game.intro_layer.coin.modulate.a > 0.0, "la moneda aparece después del VS")
+	await create_timer(0.7).timeout
+	check(intro_game.intro_layer == null, "la presentación termina sola")
+	check(intro_game.intro_layer == null and not intro_game._intro_active(), "después de la presentación se puede jugar")
+	intro_game._on_small_pressed(4, 0)
+	check(intro_sent == [[4, 0]], "terminada la presentación, mi jugada se pide al servidor")
+	intro_game.queue_free()
+	# La moneda siempre cae en la marca que le tocó a este jugador
+	for seat in [1, 2]:
+		var intro := IntroScreen.new()
+		intro.my_seat = seat
+		intro.duration_ms = 400
+		root.add_child(intro)
+		await create_timer(0.6).timeout
+		check(intro.coin.face == seat, "la moneda cae en %s cuando me toca %s" % ["X" if seat == 1 else "O", "X" if seat == 1 else "O"])
+		intro.queue_free()
+	await process_frame
 
 	# --- Juego online (mensajes del servidor simulados) ---
 	var start := {

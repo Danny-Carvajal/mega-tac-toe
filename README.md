@@ -93,3 +93,9 @@ registros se pueden subir al servidor.
 Debajo de JUGAR hay un botón chiquito "Práctica" con 5 niveles (`scripts/ai.gd`): 1 Novato (azar), 2 Aprendiz (ve jugadas de un paso),
 3 Estratega (3 jugadas adelante), 4 Experto (5 jugadas adelante) y 5 Maestro (búsqueda alfa-beta por tiempo, ~1,5 s por jugada).
 La persona es X y empieza. La IA piensa en un hilo aparte (en la web, sin hilos, piensa menos). Las partidas de práctica todavía no se guardan en estadísticas ni historial.
+
+## Presentación de la partida online (VS + moneda)
+
+Al emparejarse, el servidor da `intro_ms` (8,5 s por defecto, `--intro=` para cambiarlo) de presentación: VS con los dos jugadores,
+moneda animada y la marca que le tocó a cada uno (X siempre empieza). El servidor ya sorteó el asiento; el cliente solo lo anima
+(`scripts/intro_screen.gd`). En ese tiempo no se aceptan jugadas y el reloj de X todavía no corre. Un servidor viejo no manda `intro_ms`: sin presentación.

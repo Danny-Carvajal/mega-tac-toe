@@ -14,7 +14,7 @@ extends Node
 ##   {t:"resume", token}                   volver a una partida en curso tras perder la conexión
 ## Mensajes servidor -> cliente:
 ##   {t:"waiting"}, {t:"room", code}
-##   {t:"start", you, token, names, colors, initial_ms, increment_ms, clocks}
+##   {t:"start", you, token, names, colors, initial_ms, increment_ms, intro_ms, clocks}
 ##   {t:"move", big, small, player, clocks}
 ##   {t:"skip", player, skips:[x,o], clocks}   se le acabó el tiempo: le saltan el turno y
 ##       el rival deshace su última jugada y la vuelve a elegir (UltimateGame.skip_turn)
@@ -46,6 +46,8 @@ var increment_ms := 45000
 var skip_refill_ms := 90000
 ## Tiempo que se espera a que un jugador desconectado vuelva antes de darle la derrota.
 var grace_ms := 60000
+## Presentación (VS + moneda) antes de la primera jugada: no se puede jugar ni corren los relojes.
+var intro_ms := 8500
 
 var _tcp := TCPServer.new()
 var _conns: Array[Conn] = []
@@ -83,6 +85,8 @@ class Session:
 	var log: Array = []
 	## Desde cuándo está desconectado cada asiento (0 = conectado).
 	var gone_since: Array = [0, 0, 0]
+	## Hasta cuándo dura la presentación (VS + moneda); antes de eso no se acepta ninguna jugada.
+	var intro_until := 0
 
 
 func _ready() -> void:
@@ -112,6 +116,8 @@ func _parse_args() -> void:
 			skip_refill_ms = int(arg.get_slice("=", 1))
 		elif arg.begins_with("--grace="):
 			grace_ms = int(arg.get_slice("=", 1))
+		elif arg.begins_with("--intro="):
+			intro_ms = int(arg.get_slice("=", 1))
 
 
 func _process(_delta: float) -> void:
@@ -264,7 +270,8 @@ func _start_session(a: Conn, b: Conn) -> void:
 	b.seat = 2
 	_sessions.append(session)
 	var now := Time.get_ticks_msec()
-	session.clock.start(1, now)
+	session.intro_until = now + intro_ms
+	session.clock.start(1, session.intro_until)  # el reloj de X arranca recién cuando termina la presentación
 
 	var names := [a.player_name, b.player_name]
 	var colors := [a.colors["x"], b.colors["o"]]
@@ -280,6 +287,7 @@ func _start_session(a: Conn, b: Conn) -> void:
 			"increment_ms": increment_ms,
 			"max_skips": MAX_SKIPS,
 			"rules": UltimateGame.RULES_VERSION,
+			"intro_ms": intro_ms,
 			"clocks": session.clock.snapshot(now),
 		})
 
@@ -293,6 +301,9 @@ func _on_move(conn: Conn, big: int, small: int) -> void:
 		_send(conn, {"t": "error", "msg": "No es tu turno"})
 		return
 	var now := Time.get_ticks_msec()
+	if now < session.intro_until:
+		_send(conn, {"t": "error", "msg": "Todavía no empieza la partida"})
+		return
 	if session.clock.is_expired(now):
 		# La jugada llegó tarde: ya le tocaba el salto.
 		_handle_timeout(session, now)

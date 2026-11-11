@@ -27,7 +27,7 @@ func start(player: int, now_ms: int) -> void:
 
 func remaining_ms(player: int, now_ms: int) -> int:
 	if player == active:
-		return maxi(0, banks[player] - (now_ms - _turn_started_ms))
+		return maxi(0, banks[player] - maxi(0, now_ms - _turn_started_ms))
 	return banks[player]
 
 

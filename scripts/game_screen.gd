@@ -12,6 +12,7 @@ const UltimateGame := preload("res://scripts/ultimate_game.gd")
 const Profile := preload("res://scripts/profile.gd")
 const Fx := preload("res://scripts/fx.gd")
 const UltimateAI := preload("res://scripts/ai.gd")
+const IntroScreen := preload("res://scripts/intro_screen.gd")
 
 ## Casilla vacía de un tablero donde no se puede jugar: apagada pero que se siga viendo (para los apuntes).
 const ARROW_ALPHA := 0.7
@@ -44,6 +45,10 @@ var session_id := ""
 var _start_names: Array = []
 var _start_colors: Array = []
 var _clock_received_ms := 0
+## Presentación online (VS + moneda): hasta ese momento no se puede jugar y los relojes no corren.
+var intro_ms := 0
+var _intro_until_ms := 0
+var intro_layer: Control
 var _result_text := ""
 ## Fin de partida: cartel grande al medio (Ganaste / Perdiste / Empate) con "Ver tablero" y "Volver al menú".
 var result_layer: Control
@@ -189,7 +194,9 @@ func setup_online(start: Dictionary, profile: Profile) -> void:
 		_notice_until_ms = 1 << 60
 	var clocks: Array = start.get("clocks", [0, 0])
 	clocks_ms = [0, int(clocks[0]), int(clocks[1])]
-	_clock_received_ms = Time.get_ticks_msec()
+	intro_ms = int(start.get("intro_ms", 0))
+	_intro_until_ms = Time.get_ticks_msec() + intro_ms
+	_clock_received_ms = _intro_until_ms  # el reloj de X recién corre cuando termina la presentación
 
 
 func _ready() -> void:
@@ -198,6 +205,37 @@ func _ready() -> void:
 		replay_goto(0)
 	else:
 		_refresh()
+	if online and intro_ms > 0:
+		_start_intro()
+
+
+## VS + moneda por encima de todo: el servidor ya sorteó quién es X, acá solo se muestra.
+func _start_intro() -> void:
+	var intro := IntroScreen.new()
+	intro.my_name = names[my_seat]
+	intro.opponent_name = names[3 - my_seat]
+	intro.my_seat = my_seat
+	intro.mark_colors = colors
+	intro.duration_ms = intro_ms
+	intro.finished.connect(_end_intro)
+	add_child(intro)
+	intro_layer = intro
+
+
+func _end_intro() -> void:
+	if intro_layer == null:
+		return
+	var layer := intro_layer
+	intro_layer = null
+	var tween := layer.create_tween()
+	tween.tween_property(layer, "modulate:a", 0.0, 0.3)
+	tween.tween_callback(layer.queue_free)
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_refresh()
+
+
+func _intro_active() -> bool:
+	return intro_layer != null
 
 
 func _process(_delta: float) -> void:
@@ -358,6 +396,9 @@ func set_opponent_connected(connected: bool) -> void:
 
 ## Reconstruye la partida a partir de las jugadas guardadas en el servidor.
 func apply_resume(data: Dictionary) -> void:
+	if intro_layer != null:  # reconectó en plena presentación: se salta
+		intro_layer.queue_free()
+		intro_layer = null
 	game = UltimateGame.new()
 	last_move = Vector2i(-1, -1)
 	for entry in data.get("log", []):
@@ -391,7 +432,7 @@ func restore_payload(token: String) -> Dictionary:
 	for seat in [1, 2]:
 		var ms: int = clocks_ms[seat]
 		if not finished and not game.is_over() and game.current_player == seat:
-			ms = maxi(0, ms - (now - _clock_received_ms))
+			ms = maxi(0, ms - maxi(0, now - _clock_received_ms))
 		clocks.append(ms)
 	return {
 		"t": "restore",
@@ -652,7 +693,7 @@ func _on_small_pressed(big: int, small: int) -> void:
 		return
 	if online:
 		# El servidor es quien decide: acá solo se pide la jugada.
-		if finished or game.current_player != my_seat or not game.is_legal(big, small):
+		if finished or _intro_active() or game.current_player != my_seat or not game.is_legal(big, small):
 			return
 		move_requested.emit(big, small)
 	else:
@@ -1101,7 +1142,7 @@ func _refresh() -> void:
 	if not finished:
 		for move in game.legal_moves():
 			legal[move] = true
-	var can_play := not finished and not replay and (not _single_seat() or game.current_player == my_seat)
+	var can_play := not finished and not replay and not _intro_active() and (not _single_seat() or game.current_player == my_seat)
 	# Tableros donde hay que jugar ahora (un tablero ganado sigue contando si le quedan casillas).
 	var playable_boards := {}
 	for move in legal:
@@ -1216,7 +1257,7 @@ func _refresh_clocks() -> void:
 		var ms: int = clocks_ms[seat]
 		var running: bool = not finished and not game.is_over() and game.current_player == seat
 		if running:
-			ms = maxi(0, ms - (now - _clock_received_ms))
+			ms = maxi(0, ms - maxi(0, now - _clock_received_ms))
 		var seconds := ceili(ms / 1000.0)
 		var label: Label = clock_labels[seat]
 		label.text = "%s\n%d:%02d" % [names[seat], seconds / 60, seconds % 60]
